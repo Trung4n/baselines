@@ -30,7 +30,7 @@ Không so ATE với DarkGS, SpotlessGS, SunFaded: chúng cần pose cho trước
 - Cùng loại GPU (Kaggle T4). FPS đo đúng như `PROTOCOL.md`.
 - Mỗi cấu hình chạy ít nhất 2 lần nếu quota cho phép. Dao động của đồ án là 0.37 cm ATE và 0.8 dB PSNR (D139).
 - Phụ thuộc của các phương pháp **không** vào `environment.yml` của MonoGS. Dùng môi trường hoặc notebook riêng.
-- W&B: project `MonoGS`, tag `baseline` (`score.py --wandb`). API key lấy từ Kaggle Secrets, **không** ghi key vào notebook hay vào file.
+- W&B: **không đẩy** kết quả baseline lên W&B (người dùng quyết định 2026-11-12). Chấm bằng `--no_wandb`; số liệu nằm ở `results/` và `RESULTS.md`. Cờ `--wandb` vẫn còn trong `score.py`; nếu dùng thì lấy API key từ Kaggle Secrets hay biến môi trường, **không** ghi key vào notebook hay vào file.
 
 ## Dữ liệu
 
@@ -63,7 +63,7 @@ Phân công: **người dùng chạy trên Kaggle, tải về một file zip cho
    - render `<idx:06d>.npy` tại pose ước lượng, cho các frame `protocol.required_renders(N, keyframes)`. Tập này gồm các frame chấm chỉ số và 5 frame chung để so ảnh: 100, 500, 825, 1125, 1750, render kể cả khi là keyframe;
    - `figures/`, `timing.json`, `calibration.json`, `method.json`, `summary.json`;
    - `run/`: config, log, bản đồ cuối.
-3. Chấm cục bộ trong repo và môi trường MonoGS (WSL: `~/bin/micromamba run -n MonoGS`). Lệnh `common/score_zip.py --zip <zip> --dataset <dataset cục bộ> --wandb` giải nén vào `runs/` (bị git bỏ qua), kiểm nội tại, cảnh và số frame, rồi chạy `score.py` vào `results/<method>__<scene>_<variant>/<thời điểm bắt đầu>/`. Bản ghi của run nằm ở `run/` trong thư mục đó, gồm cả sha256 của zip.
+3. Chấm cục bộ trong repo và môi trường MonoGS (WSL: `~/bin/micromamba run -n MonoGS`). Lệnh `common/score_zip.py --zip <zip> --dataset <dataset cục bộ> --no_wandb` giải nén vào `runs/` (bị git bỏ qua), kiểm nội tại, cảnh và số frame, rồi chạy `score.py` vào `results/<method>__<scene>_<variant>/<thời điểm bắt đầu>/`. Bản ghi của run nằm ở `run/` trong thư mục đó, gồm cả sha256 của zip.
 4. Thêm một dòng vào bảng chi tiết của `RESULTS.md`, cập nhật bảng tổng, ghi mọi khác biệt so với mặc định của phương pháp.
 
 Với MonoGS của đồ án: `common/from_monogs_record.py --record record/runs/<run> --figures --dataset <...>` ghi ra quỹ đạo, keyframe và ảnh 5 frame chung từ bản đồ trong record (`--map final` hoặc `final_refined`), sau đó chạy `score.py --no_render`. PSNR, SSIM, LPIPS lấy từ log của MonoGS. Cách này cho ATE trên mọi frame theo cùng giao thức.
@@ -93,7 +93,7 @@ Phần chấm (`score.py`, `score_zip.py`, `from_monogs_record.py`) import code 
 - [x] Giao thức, `common/`, `RESULTS.md` cùng số của đồ án
 - [x] Đóng gói zip và `score_zip.py` (2026-11-13). Đã thử với một run giả: quỹ đạo tham chiếu cộng lệch đã biết, render bằng ảnh quan sát cộng nhiễu σ = 0.01. Kết quả PSNR 40.17 dB, ATE đúng như tính tay. Zip giả 402 MiB, phần lớn là render; render thật nén tốt hơn ảnh nhiễu.
 - [x] Notebook chung `run_baseline.ipynb` và `common/kaggle_runner.py` (2026-11-13). Đã thử với một phương pháp giả: run xong ra zip, run lỗi, run quá giờ, chạy tiếp thì log ghi nối, `collect` giữ thư mục của run khác.
-- [ ] SplaTAM: `adapter.py` và `setup_kaggle.sh` đã viết (`methods/splatam/`), phần không cần GPU đã kiểm cục bộ; **chưa chạy** `office0` `lit` và `even`
+- [x] SplaTAM `office0` `lit` và `even`, mỗi biến thể một run (2026-11-12). Đã chấm, kết quả và phân tích ở `RESULTS.md`: `lit` ATE 62.6 cm, `even` 0.80 cm. Hai run chạy ở hai phiên Kaggle riêng, nên FPS dùng được. Chạy song song nhiều phiên riêng là cách hợp lệ để tiết kiệm thời gian. Còn mở: run thứ hai cho mỗi biến thể.
 - [ ] ORB-SLAM3: như trên
-- [ ] GS-ICP SLAM: như trên
+- [ ] GS-ICP SLAM: mã chép vào `third_party/GS_ICP_SLAM`; `adapter.py`, `hooks.py`, `setup_kaggle.sh` đã viết (2026-11-12); phần không cần build đã kiểm cục bộ; **chưa chạy** trên Kaggle. Đóng gói zip dùng `common/runzip.py`, phần chung cho các adapter mới (SplaTAM còn bản riêng, cùng bố cục).
 - [ ] MonoGS gốc chạy lại bằng code hiện tại (`lit`, `even`, có `--record`), chấm bằng `from_monogs_record.py`

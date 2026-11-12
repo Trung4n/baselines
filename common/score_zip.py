@@ -30,7 +30,7 @@ import score  # noqa: E402
 
 BASELINES = os.path.dirname(COMMON)
 RECORD_FILES = ("summary.json", "method.json", "calibration.json", "timing.json", "notes.txt")
-SKIP_RUN_FILES = ("params.npz",)
+SKIP_RUN_FILES = ("params.npz", "scene.ply")  # final maps (SplaTAM, GS-ICP): large, stay in runs/
 
 
 def sha256(path):
@@ -111,10 +111,14 @@ def main(argv=None):
     for f in RECORD_FILES:
         if os.path.isfile(os.path.join(run, f)):
             shutil.copy(os.path.join(run, f), record)
-    if os.path.isdir(os.path.join(run, "run")):
-        for f in sorted(os.listdir(os.path.join(run, "run"))):
-            if f not in SKIP_RUN_FILES:
-                shutil.copy(os.path.join(run, "run", f), record)
+    run_dir = os.path.join(run, "run")
+    for root, _, files in os.walk(run_dir):  # keep the zip's sub-folders (e.g. GS-ICP's gsicp_out/hook/)
+        for f in sorted(files):
+            if f in SKIP_RUN_FILES:
+                continue
+            rel = os.path.relpath(os.path.join(root, f), run_dir)
+            os.makedirs(os.path.dirname(os.path.join(record, rel)), exist_ok=True)
+            shutil.copy(os.path.join(root, f), os.path.join(record, rel))
     with open(os.path.join(record, "source.json"), "w", encoding="utf-8") as f:
         json.dump({"zip": os.path.basename(args.zip), "bytes": os.path.getsize(args.zip),
                    "sha256": sha256(args.zip), "extracted_to": os.path.relpath(run, BASELINES),

@@ -22,7 +22,7 @@ all recorded in <work>/overrides.json and README.md:
 - resolution, intrinsics, depth scale: from protocol.calibration() (a copy
   of MonoGS's Dataset.Calibration, checked against it at scoring), written
   into a copy of SplaTAM's configs/data/replica.yaml (other keys kept);
-- paths, run name; W&B logging off (score_zip.py logs the scored run);
+- paths, run name; W&B logging off;
 - traj.txt: SplaTAM's loader reads one pose per frame. The staged dataset
   gives it IDENTITY matrices, so no reference pose can reach the run (the
   real traj.txt is only read when scoring). SplaTAM's online ATE printouts
@@ -494,7 +494,7 @@ def cmd_package(args):
         "gaussians": method["gaussians"], "fps": timing_["frames"] / timing_["seconds"],
         "seconds": timing_["seconds"], "sessions": timing_["sessions"], "gpu": timing_["gpu"],
         "map_included": not args.no_map,
-        "score": "python baselines/common/score_zip.py --zip <this zip> --dataset <local dataset folder> --wandb",
+        "score": "python baselines/common/score_zip.py --zip <this zip> --dataset <local dataset folder> --no_wandb",
         "files": sorted(arc for _, arc in members) + ["summary.json"],
     }
     tmp = zip_path + ".tmp"

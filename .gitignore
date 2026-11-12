@@ -2,3 +2,5 @@ __pycache__/
 # Extracted run zips (renders, maps: large); scored outputs go to results/
 runs/
 *.zip
+
+results/

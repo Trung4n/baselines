@@ -19,7 +19,7 @@
 
 ```
 python baselines/common/score_zip.py --zip splatam__office0_lit__<...>.zip \
-    --dataset /mnt/d/CodeForYou/Replica/04_datasets/monogs/office0/lit --wandb
+    --dataset /mnt/d/CodeForYou/Replica/04_datasets/monogs/office0/lit --no_wandb
 ```
 
 Phiên Kaggle bị ngắt: chép thư mục run của phiên trước về `/kaggle/working`, rồi chạy ô resume của notebook (`K.run(..., resume=True)`, tức `adapter.py run ... --resume`). Adapter tiếp tục từ checkpoint đầy đủ mới nhất (`params<i>.npz` cùng `keyframe_time_indices<i>.npy`), dùng cơ chế checkpoint có sẵn của SplaTAM. `timing.json` cộng thời gian các phiên tới đúng checkpoint mà phiên sau bắt đầu, và ghi rõ là đã resume. Với run đã chạy xong mà thiếu zip: `adapter.py package --dataset <...> --work <...>`.
@@ -32,7 +32,7 @@ Gốc: `configs/replica/splatam.py` và `configs/data/replica.yaml` của SplaTA
 |---|---|
 | Kích thước 600×340, `fx`, `fy`, `cx`, `cy`, `png_depth_scale`, đọc bằng `protocol.calibration()` (bản chép `common/calibration.yaml` của `configs/rgbd/replica/base_config.yaml`, `score_zip.py` kiểm khớp) | Bắt buộc: dataset của đồ án là Replica giảm nửa độ phân giải. SplaTAM tự đổi tỉ lệ nội tại theo `desired_image_*`, nên khai báo thẳng kích thước gốc của dataset (tỉ lệ 1). `crop_edge` giữ 0 như gốc |
 | Đường dẫn, `run_name` | Bắt buộc |
-| `use_wandb: false` | Chỉ là log. Run được chấm sẽ log lên W&B qua `score_zip.py --wandb` |
+| `use_wandb: false` | Chỉ là log; baseline không đẩy W&B (`CLAUDE.md`) |
 | `traj.txt` của thư mục dàn dữ liệu là ma trận **đơn vị** | Loader Replica của SplaTAM đọc `traj.txt` để in ATE trong lúc chạy. Thay bằng ma trận đơn vị thì không pose tham chiếu nào lọt vào run. Tracking không đọc nó vì `tracking.use_gt_poses` là `false` (adapter kiểm). Hệ quả: ATE SplaTAM tự in trong log là vô nghĩa. `traj.txt` thật chỉ được đọc khi chấm |
 | Bỏ bước `eval()` cuối của SplaTAM | Việc chấm là của `score.py`. Lời gọi đó được dùng làm mốc kết thúc vòng SLAM để đo FPS |
 | Checkpoint mỗi `--checkpoint_every` frame (notebook: 100), chỉ giữ checkpoint mới nhất | Phiên Kaggle tối đa 12 giờ. Thời gian lưu checkpoint nằm trong FPS (khoảng 20 lần lưu trên 2000 frame) |
@@ -60,4 +60,9 @@ Gốc: `configs/replica/splatam.py` và `configs/data/replica.yaml` của SplaTA
 
 ## Đã chạy
 
-(chưa có)
+| Ngày | Biến thể | ATE all (cm) | PSNR / SSIM / LPIPS | FPS | Kết quả |
+|---|---|---|---|---|---|
+| 2026-11-12 | office0 / lit | 62.60 | 13.59 / 0.512 / 0.591 | 0.237 | `results/splatam__office0_lit/2026-11-12-09-12-50` |
+| 2026-11-12 | office0 / even | 0.80 | 38.92 / 0.969 / 0.055 | 0.198 | `results/splatam__office0_even/2026-11-12-09-12-29` |
+
+Torch 2.11.0+cu130 trên Kaggle, mỗi run một phiên (không resume). Phân tích ở `RESULTS.md`, mục "SplaTAM trên `office0`".

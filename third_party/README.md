@@ -6,6 +6,7 @@ Chép thẳng mã nguồn vào repo, không dùng submodule, để notebook Kagg
 |---|---|---|---|
 | `SplaTAM/` | spla-tam/SplaTAM | `da6bbcd2` (2024-06-19) | `methods/splatam/` |
 | `diff-gaussian-rasterization-w-depth/` | JonathonLuiten/diff-gaussian-rasterization-w-depth | `cb65e4b8` (2023-09-19) | rasterizer của SplaTAM, build trên Kaggle |
+| `GS_ICP_SLAM/` | Lab-of-AI-and-Robotics/GS_ICP_SLAM | `5f996a87` (2026-06-20), kèm 3 submodule ở commit nó ghim (rasterizer, fast_gicp, simple-knn) | `methods/gsicp/` |
 
 Quy tắc:
 

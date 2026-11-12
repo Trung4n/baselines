@@ -1,0 +1,19 @@
+{
+  "name": "GS_ICP_SLAM",
+  "url": "https://github.com/Lab-of-AI-and-Robotics/GS_ICP_SLAM",
+  "commit": "5f996a872a979406b270fe0ee3b0a8f25c5e9ae3",
+  "commit_date": "2026-06-20 20:10:31 +0900",
+  "submodules": {
+    "submodules/diff-gaussian-rasterization": {"url": "https://github.com/Lab-of-AI-and-Robotics/diff-gaussian-rasterization", "commit": "95dbb69d81449ae56783628803198bea2f42e2c9"},
+    "submodules/fast_gicp": {"url": "https://github.com/Lab-of-AI-and-Robotics/fast_gicp", "branch": "gs_icp_slam", "commit": "e2954b1aa06a563d1b2ef2ec5d1fddd1e911d8f4"},
+    "submodules/simple-knn": {"url": "https://github.com/camenduru/simple-knn", "commit": "44f764299fa305faf6ec5ebd99939e0508331503"}
+  },
+  "changes": [
+    "submodules copied in as plain files at the commits the repo pins (no .git, no gitlinks)",
+    "removed, not used to build or run SLAM: SIBR_viewers/ (viewer, 15 MB), assets/ (README images), committed __pycache__/ (.pyc of py3.8/3.9)",
+    "fast_gicp: removed data/ (51 MB test clouds), python_tester/, thirdparty/Eigen and thirdparty/nvbio (only used with BUILD_VGICP_CUDA, off by default; the build uses the system Eigen3)",
+    "diff-gaussian-rasterization: removed third_party/glm/doc and third_party/glm/test (the build only includes third_party/glm/)"
+  ],
+  "build_patches": "not applied here: methods/gsicp/setup_kaggle.sh builds COPIES with '#include <cstdint>' added to cuda_rasterizer/rasterizer_impl.h and '#include <cfloat>' to simple-knn/simple_knn.cu when missing (newer GCC / CUDA); sources here stay as the commits",
+  "check": "every other file equals the commits (git status against the original clones, 2026-11-12)"
+}

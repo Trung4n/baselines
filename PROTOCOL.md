@@ -73,7 +73,7 @@ Phương pháp khác chạy trên Kaggle (không có repo MonoGS) và mỗi lầ
 Chấm cục bộ trong repo và môi trường MonoGS:
 
 ```
-python baselines/common/score_zip.py --zip <zip> --dataset <thư mục dataset cục bộ> --wandb
+python baselines/common/score_zip.py --zip <zip> --dataset <thư mục dataset cục bộ> --no_wandb
 ```
 
 Script giải nén vào `baselines/runs/` (git bỏ qua), rồi kiểm nội tại, cảnh, biến thể và số frame. Sau đó nó chạy `score.py` vào `baselines/results/<method>__<scene>_<variant>/<started_at>/` và chép bản ghi của run (trừ render và bản đồ) vào `run/`, kèm `source.json` (tên, cỡ, sha256 của zip). Thư mục kết quả đã có thì không bao giờ ghi đè.
@@ -92,4 +92,4 @@ Script giải nén vào `baselines/runs/` (git bỏ qua), rồi kiểm nội t�
 | `figures/` | ảnh kết xuất và ảnh quan sát của 5 frame chung |
 | `metrics.json` | toàn bộ chỉ số, kèm commit của phương pháp và ghi chú |
 
-Với `--wandb`, kết quả được đẩy lên project `MonoGS`: tên run `<method>__<scene>_<variant>_<thời gian>`, tag `baseline`, kèm bảng `Metrics` cùng cột với MonoGS và thêm cột `ATE all frames`.
+Mặc định không đẩy W&B (`--no_wandb`, `CLAUDE.md`). Nếu dùng `--wandb`, kết quả được đẩy lên project `MonoGS`: tên run `<method>__<scene>_<variant>_<thời gian>`, tag `baseline`, kèm bảng `Metrics` cùng cột với MonoGS và thêm cột `ATE all frames`.
