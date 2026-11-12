@@ -9,6 +9,9 @@
 # - ORB_SLAM3/CMakeLists.txt: -std=c++11 -> -std=c++17 (Pangolin 0.8 is C++17;
 #   COMPILEDWITHC11 stays defined, as upstream), plus the driver
 #   methods/orbslam3/rgbd_monogs.cc as one more executable;
+# - ORB_SLAM3/src/LoopClosing.cc: 'mnFullBAIdx++;' -> 'mnFullBAIdx = true;'
+#   (3 places; a bool member, ++ on bool is an error in C++17 and always set
+#   true before, so behaviour is unchanged);
 # - CXXFLAGS '-include cstdint' for every C++ build (GCC 13 no longer pulls in
 #   <cstdint> transitively), CMAKE_POLICY_VERSION_MINIMUM=3.5 (CMake 4 refuses
 #   cmake_minimum_required < 3.5, which DBoW2, g2o and ORB_SLAM3 declare);
@@ -44,10 +47,13 @@ STAMP="$BUILD/.built"
 if [[ -f "$STAMP" && -x "$BUILD/ORB_SLAM3/Examples/RGB-D/rgbd_monogs" ]]; then
     echo "ORB-SLAM3 already built in $BUILD"
 else
-    rm -rf "$BUILD"
+    # Incremental: a failed earlier call in this session leaves its copies and
+    # build trees; make only redoes what is missing. The files patched below
+    # are restored from third_party/ first, so the patches apply to pristine
+    # sources every time.
     mkdir -p "$BUILD"
-    cp -r "$BASELINES/third_party/Pangolin" "$BUILD/Pangolin"
-    cp -r "$BASELINES/third_party/ORB_SLAM3" "$BUILD/ORB_SLAM3"
+    [[ -d "$BUILD/Pangolin" ]] || cp -r "$BASELINES/third_party/Pangolin" "$BUILD/Pangolin"
+    [[ -d "$BUILD/ORB_SLAM3" ]] || cp -r "$BASELINES/third_party/ORB_SLAM3" "$BUILD/ORB_SLAM3"
 
     echo "=== Pangolin"
     cmake -S "$BUILD/Pangolin" -B "$BUILD/Pangolin/build" -DCMAKE_BUILD_TYPE=Release \
@@ -66,9 +72,17 @@ else
     done
 
     echo "=== vocabulary"
-    tar -xf "$O/Vocabulary/ORBvoc.txt.tar.gz" -C "$O/Vocabulary"
+    [[ -f "$O/Vocabulary/ORBvoc.txt" ]] || tar -xf "$O/Vocabulary/ORBvoc.txt.tar.gz" -C "$O/Vocabulary"
 
     echo "=== ORB_SLAM3 + rgbd_monogs"
+    cp "$BASELINES/third_party/ORB_SLAM3/CMakeLists.txt" "$O/CMakeLists.txt"
+    cp "$BASELINES/third_party/ORB_SLAM3/src/LoopClosing.cc" "$O/src/LoopClosing.cc"
+    # C++17 forbids ++ on a bool: LoopClosing.h declares 'bool mnFullBAIdx' and
+    # LoopClosing.cc increments it in 3 places. For a bool, x++ always sets
+    # true (C++14), so '= true' is the same behaviour.
+    n="$(grep -c 'mnFullBAIdx++;' "$O/src/LoopClosing.cc" || true)"
+    [[ "$n" == 3 ]] || { echo "expected 3 'mnFullBAIdx++;' in LoopClosing.cc, found $n" >&2; exit 1; }
+    sed -i 's|mnFullBAIdx++;|mnFullBAIdx = true;  // baselines: was mnFullBAIdx++ on a bool (C++17)|' "$O/src/LoopClosing.cc"
     grep -q 'set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")' "$O/CMakeLists.txt"
     sed -i 's|set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")|set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")|' "$O/CMakeLists.txt"
     cp "$HERE/rgbd_monogs.cc" "$O/Examples/RGB-D/rgbd_monogs.cc"

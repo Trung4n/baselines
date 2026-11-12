@@ -38,6 +38,7 @@ Gốc: `Examples/RGB-D/rgbd_tum.cc` với `Examples/RGB-D/TUM1.yaml`. Mọi thay
 | Viewer tắt | Kaggle không có màn hình |
 | Đọc ảnh thẳng theo chỉ số thay cho file association | Định dạng dataset |
 | Build: C++17, `-include cstdint`, chính sách CMake ≥ 3.5; chỉ build thư viện và driver | Chỉ sửa lỗi build với Pangolin 0.8, GCC 13, CMake mới; không đổi thuật toán. Làm trên bản chép trong `/tmp` |
+| `LoopClosing.cc`: `mnFullBAIdx++` → `mnFullBAIdx = true` (3 chỗ) | `mnFullBAIdx` khai báo là `bool`; C++17 cấm `++` trên `bool`. Với `bool`, `++` luôn gán `true`, nên hành vi giữ nguyên. Gặp ở lần build đầu trên Kaggle (2026-11-12) |
 
 Loop closure và atlas nhiều bản đồ bật theo mặc định. MonoGS không có loop closure; báo cáo phải nêu điều này.
 
