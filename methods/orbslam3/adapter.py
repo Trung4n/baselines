@@ -135,7 +135,13 @@ def run_driver(cmd):
     """Runs the driver with its output passed through (the runner shows and
     logs it) and returns that output for parsing."""
     print("$ " + " ".join(cmd), flush=True)
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
+    # Without LD_LIBRARY_PATH, as setup_kaggle.sh builds and tests it: on
+    # Kaggle it can hold the NVIDIA driver's older libGLdispatch, which the
+    # system libOpenGL (pulled in through Pangolin, unused) cannot load with.
+    # ORB-SLAM3 is CPU only.
+    env = {k: v for k, v in os.environ.items() if k != "LD_LIBRARY_PATH"}
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
+                            env=env)
     lines = []
     for line in proc.stdout:
         print(line, end="", flush=True)

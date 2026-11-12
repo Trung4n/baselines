@@ -39,6 +39,23 @@ if (( ${#missing[@]} )); then
 fi
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
 export CXXFLAGS="${CXXFLAGS:-} -include cstdint"
+
+# OpenGL: ORB-SLAM3 links Pangolin, which links the system libOpenGL (GLVND,
+# installed above). The driver never uses OpenGL (viewer off), but the linker
+# and the loader still resolve libOpenGL's own dependency libGLdispatch.so.0,
+# and both search LD_LIBRARY_PATH first. On Kaggle that may hold the NVIDIA
+# driver's libraries, with an older libGLdispatch that lacks the
+# '_glapi_tls_Current' symbol the system libOpenGL needs (first build,
+# 2026-11-12: "libOpenGL.so: undefined reference to `_glapi_tls_Current'").
+# ORB-SLAM3 is CPU only, so this script builds, and the adapter runs the
+# driver, without LD_LIBRARY_PATH; -rpath-link points the linker at the
+# system's multiarch library directory as well.
+echo "LD_LIBRARY_PATH was: ${LD_LIBRARY_PATH:-<unset>} (unset for ORB-SLAM3)"
+for d in $(echo "${LD_LIBRARY_PATH:-}" | tr ':' ' ') /usr/lib/x86_64-linux-gnu; do
+    ls "$d"/libGLdispatch.so* 2>/dev/null | sed 's/^/  found: /' || true
+done
+unset LD_LIBRARY_PATH
+MULTIARCH_LIB="/usr/lib/$(gcc -print-multiarch)"
 cmake --version | head -1
 pkg-config --modversion opencv4 | sed 's/^/OpenCV /'
 "$PYTHON" -c "import numpy, scipy, yaml; print('python deps ok')"
@@ -93,16 +110,20 @@ add_executable(rgbd_monogs Examples/RGB-D/rgbd_monogs.cc)
 target_link_libraries(rgbd_monogs ${PROJECT_NAME})
 set_target_properties(rgbd_monogs PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/RGB-D)
 EOF
-    cmake -S "$O" -B "$O/build" -DCMAKE_BUILD_TYPE=Release -DPangolin_DIR="$BUILD/Pangolin/build"
+    cmake -S "$O" -B "$O/build" -DCMAKE_BUILD_TYPE=Release -DPangolin_DIR="$BUILD/Pangolin/build" \
+        -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath-link,$MULTIARCH_LIB"
     cmake --build "$O/build" -j "$JOBS" --target ORB_SLAM3 rgbd_monogs
     touch "$STAMP"
 fi
 
-# The driver starts (links and loads) and prints its usage.
-if "$BUILD/ORB_SLAM3/Examples/RGB-D/rgbd_monogs" 2>&1 | grep -q "Usage: rgbd_monogs"; then
-    echo "rgbd_monogs ok: $BUILD/ORB_SLAM3/Examples/RGB-D/rgbd_monogs"
+# The driver starts (links and loads) and prints its usage; run as the
+# adapter runs it, without LD_LIBRARY_PATH.
+DRV="$BUILD/ORB_SLAM3/Examples/RGB-D/rgbd_monogs"
+ldd "$DRV" | grep -E "GL|pango|ORB_SLAM3|not found" | sed 's/^/  ldd: /' || true
+if "$DRV" 2>&1 | grep -q "Usage: rgbd_monogs"; then
+    echo "rgbd_monogs ok: $DRV"
 else
-    "$BUILD/ORB_SLAM3/Examples/RGB-D/rgbd_monogs" || true
+    "$DRV" || true
     echo "rgbd_monogs does not start" >&2
     exit 1
 fi

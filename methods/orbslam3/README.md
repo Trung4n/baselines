@@ -38,6 +38,7 @@ Gốc: `Examples/RGB-D/rgbd_tum.cc` với `Examples/RGB-D/TUM1.yaml`. Mọi thay
 | Viewer tắt | Kaggle không có màn hình |
 | Đọc ảnh thẳng theo chỉ số thay cho file association | Định dạng dataset |
 | Build: C++17, `-include cstdint`, chính sách CMake ≥ 3.5; chỉ build thư viện và driver | Chỉ sửa lỗi build với Pangolin 0.8, GCC 13, CMake mới; không đổi thuật toán. Làm trên bản chép trong `/tmp` |
+| Build và chạy driver **không có `LD_LIBRARY_PATH`**; link thêm `-Wl,-rpath-link,/usr/lib/<multiarch>` | Lần build thứ hai trên Kaggle (2026-11-12) lỗi khi link: `libOpenGL.so: undefined reference to '_glapi_tls_Current'`. Giả thuyết: `LD_LIBRARY_PATH` của Kaggle chứa thư viện driver NVIDIA với một `libGLdispatch` cũ, mà cả trình link lẫn trình nạp đều ưu tiên. Driver không dùng OpenGL (chỉ kéo theo qua Pangolin), và ORB-SLAM3 chạy trên CPU, nên bỏ biến này không mất gì. `setup_kaggle.sh` in các bản `libGLdispatch` tìm thấy và kết quả `ldd` để kiểm giả thuyết |
 | `LoopClosing.cc`: `mnFullBAIdx++` → `mnFullBAIdx = true` (3 chỗ) | `mnFullBAIdx` khai báo là `bool`; C++17 cấm `++` trên `bool`. Với `bool`, `++` luôn gán `true`, nên hành vi giữ nguyên. Gặp ở lần build đầu trên Kaggle (2026-11-12) |
 
 Loop closure và atlas nhiều bản đồ bật theo mặc định. MonoGS không có loop closure; báo cáo phải nêu điều này.
