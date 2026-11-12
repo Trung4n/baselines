@@ -17,7 +17,7 @@ GS-ICP chạy tracking và mapping thành hai tiến trình con theo kiểu `spa
 
 ## Cách chạy
 
-1. **Kaggle**, GPU T4, bật Internet: notebook chung `run_baseline.ipynb`, đặt `METHOD = "gsicp"`. `CKPT_EVERY` tự thành 0, vì GS-ICP không có checkpoint; adapter từ chối mọi giá trị khác và từ chối `--resume`. Một run chỉ vài phút: tracking bị giới hạn 30 FPS, cộng thời gian nạp ảnh và xuất kết quả.
+1. **Kaggle**, GPU T4, bật Internet: notebook chung `run_baseline.ipynb`, đặt `METHOD = "gsicp"`. GS-ICP không có checkpoint (`kaggle.json`: `"checkpoints": false`), nên runner tự chạy với `--checkpoint_every 0` dù notebook đặt `CKPT_EVERY` bao nhiêu, có in thông báo. Bản thân adapter vẫn từ chối mọi giá trị khác 0 và từ chối `--resume`. Run lỗi thì xóa thư mục làm việc rồi chạy lại. Một run chỉ vài phút: tracking bị giới hạn 30 FPS, cộng thời gian nạp ảnh và xuất kết quả.
 2. Mỗi run cho `/kaggle/working/gsicp__<scene>_<variant>__<thời điểm bắt đầu>.zip`. Bản đồ cuối (`run/scene.ply`) có trong zip; `NO_MAP = True` bỏ nó ra.
 3. Tải zip về, chấm cục bộ:
 

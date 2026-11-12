@@ -44,11 +44,24 @@ KILL_GRACE_S = 60  # after a timeout: SIGTERM to the process group, SIGKILL this
 
 def method_dir(method):
     d = os.path.join(METHODS, method)
-    missing = [f for f in ("adapter.py", "setup_kaggle.sh") if not os.path.isfile(os.path.join(d, f))]
+    missing = [f for f in ("adapter.py", "setup_kaggle.sh", "kaggle.json") if not os.path.isfile(os.path.join(d, f))]
     if missing:
         have = sorted(m for m in os.listdir(METHODS) if os.path.isfile(os.path.join(METHODS, m, "adapter.py")))
         raise FileNotFoundError(f"methods/{method}: missing {missing}; methods with an adapter: {have}")
     return d
+
+
+def method_info(method):
+    """methods/<method>/kaggle.json: what the method supports. Required key
+    "checkpoints" (bool): whether its adapter can save checkpoints and
+    --resume. Kept in the repo, not in the notebook, so an older copy of the
+    notebook still runs a method added later."""
+    path = os.path.join(method_dir(method), "kaggle.json")
+    with open(path, encoding="utf-8") as f:
+        info = json.load(f)
+    if not isinstance(info.get("checkpoints"), bool):
+        raise KeyError(f"{path}: needs \"checkpoints\": true|false")
+    return info
 
 
 def scene_variant(dataset):
@@ -226,6 +239,14 @@ def run(method, dataset, out, checkpoint_every, timeout_h, stall_min, progress_s
     (resume it with resume=True, from its checkpoints)."""
     if not os.path.isdir(os.path.join(dataset, "results")):
         raise FileNotFoundError(f"{dataset}: no results/ (a MonoGS dataset folder?)")
+    info = method_info(method)
+    if not info["checkpoints"]:
+        if resume:
+            raise ValueError(f"{method} has no checkpoints, nothing to resume ({info.get('why', '')}): run it again")
+        if checkpoint_every:
+            print(f"note: {method} has no checkpoints ({info.get('why', '')}): "
+                  f"CKPT_EVERY={checkpoint_every} not used, run with --checkpoint_every 0", flush=True)
+            checkpoint_every = 0
     adapter = os.path.join(method_dir(method), "adapter.py")
     work = work_dir(method, dataset, out)
     os.makedirs(work, exist_ok=True)
@@ -246,8 +267,9 @@ def run(method, dataset, out, checkpoint_every, timeout_h, stall_min, progress_s
         print(f"zip: {new[0]}", flush=True)
         return new[0]
     if code != 0:
-        print(f"no zip: fix the error above, or resume with run(..., resume=True) from the checkpoints in {work}",
-              flush=True)
+        print("no zip: fix the error above, then "
+              + (f"resume with run(..., resume=True) from the checkpoints in {work}" if info["checkpoints"]
+                 else f"run it again ({method} has no checkpoints; delete {work} first)"), flush=True)
         return None
     raise RuntimeError(f"exit 0 but {len(new)} new zips for {work}: {new}")
 
