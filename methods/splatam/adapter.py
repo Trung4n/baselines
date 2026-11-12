@@ -322,7 +322,10 @@ def cmd_run(args):
                                   args.checkpoint_every, resume_idx)
     write_json(os.path.join(work, "overrides.json"), overrides)
     write_json(os.path.join(work, "config_resolved.json"), cfg)
+    print(f"SplaTAM {method_commit(splatam)} on {args.dataset}: {len(colors)} frames, "
+          f"{'resume from ' + str(resume_idx) if resume_idx is not None else 'new run'}", flush=True)
     run_slam(splatam, cfg, segments_path, segments)
+    print("SLAM done, exporting", flush=True)
     cmd_export(args)
     cmd_package(args)
 
@@ -419,13 +422,16 @@ def cmd_export(args):
     # eval() renders colour.
     cam = setup_camera(cal["width"], cal["height"], K, first_w2c)
     frames = protocol.required_renders(n, keyframes)
+    print(f"export: rendering {len(frames)} frames", flush=True)
     with torch.no_grad():
-        for i in frames:
+        for j, i in enumerate(frames):
             transformed = transform_to_frame(P, i, gaussians_grad=False, camera_grad=False)
             rendervar = transformed_params2rendervar(P, transformed)
             im, _, _ = Renderer(raster_settings=cam)(**rendervar)
             np.save(os.path.join(renders_dir, f"{i:06d}.npy"),
                     im.permute(1, 2, 0).cpu().numpy().astype(np.float16))
+            if (j + 1) % 50 == 0 or j + 1 == len(frames):  # progress for the runner's stall watchdog
+                print(f"export: rendered {j + 1}/{len(frames)}", flush=True)
     write_figures(renders_dir, colors, os.path.join(out, "figures"))
 
     segments = read_json(os.path.join(work, "timing_segments.json"))
@@ -492,9 +498,12 @@ def cmd_package(args):
         "files": sorted(arc for _, arc in members) + ["summary.json"],
     }
     tmp = zip_path + ".tmp"
+    print(f"package: zipping {len(members)} files", flush=True)
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
-        for p, arc in members:
+        for j, (p, arc) in enumerate(members):
             z.write(p, f"{name}/{arc}")
+            if (j + 1) % 100 == 0:
+                print(f"package: {j + 1}/{len(members)}", flush=True)
         z.writestr(f"{name}/summary.json", json.dumps(summary, indent=2))
     os.replace(tmp, zip_path)
     print(f"{len(members) + 1} files, {os.path.getsize(zip_path) / 2**20:.0f} MiB -> {zip_path}")

@@ -9,16 +9,29 @@ Contract of a method folder methods/<method>/ (baselines/CLAUDE.md):
   [--resume] [--no_map]: runs the method on one MonoGS dataset folder and
   ends with <dir>/../<method>__<scene>_<variant>__<start>.zip (PROTOCOL.md,
   "Gói kết quả của một lần chạy"). An adapter rejects an option it cannot
-  honour (e.g. checkpoints) with an error, never ignores it.
+  honour (e.g. checkpoints) with an error, never ignores it. It prints
+  progress often enough for the stall watchdog (stall_min) of run().
+
+Output of setup and runs goes BOTH to the notebook (repetitive progress lines
+thinned out, see Screen) and, complete, to a log file. Every child is stopped
+after a total timeout, and after stall_min minutes without any output (a
+hang). Children write to a pipe read here: a subprocess writing straight to
+the kernel's stdout would not show in the notebook cell at all.
 
 Not named kaggle.py: Kaggle images ship the `kaggle` API package.
 """
+import codecs
 import glob
 import json
 import os
+import queue
+import re
 import shutil
+import signal
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 import zipfile
 
@@ -26,7 +39,7 @@ COMMON = os.path.dirname(os.path.abspath(__file__))
 BASELINES = os.path.dirname(COMMON)
 METHODS = os.path.join(BASELINES, "methods")
 LOG_NAME = "run.log"  # the adapters pack <work>/run.log into run/ of the zip
-KILL_GRACE_S = 300  # after the timeout: SIGTERM, then SIGKILL this much later
+KILL_GRACE_S = 60  # after a timeout: SIGTERM to the process group, SIGKILL this much later
 
 
 def method_dir(method):
@@ -49,25 +62,168 @@ def work_dir(method, dataset, out):
     return os.path.join(out, f"{method}__{scene}_{variant}")
 
 
-def setup(method):
+# ---------------------------------------------------------------- streaming
+
+class Screen:
+    """Prints a child's output in the notebook without flooding it.
+
+    Lines are grouped by their text with the numbers dropped ("Tracking Time
+    Step: 12: 40%|...| 16/40" and "Selected Keyframes at Frame 12: [...]"
+    each form one group, however they interleave). A group is printed at most
+    once per progress_s seconds; the lines skipped in between are counted and
+    the count is appended when the group prints again. tqdm's
+    carriage-return updates are such lines. A line unlike any recent one (an
+    error, a traceback, a warning) always prints. The log file keeps
+    everything."""
+
+    MAX_GROUPS = 1000  # forget the oldest groups beyond this many
+
+    def __init__(self, progress_s):
+        self.progress_s = progress_s
+        self.buf = ""
+        self.groups = {}  # key -> [last printed time, skipped since]
+
+    @staticmethod
+    def key(line):
+        return re.sub(r"[\d.:/,]+", "#", line.strip())[:60]
+
+    def line(self, text):
+        if not text.strip():
+            return
+        k, now = self.key(text), time.time()
+        g = self.groups.get(k)
+        if g is not None and now - g[0] < self.progress_s:
+            g[1] += 1
+            return
+        extra = f"   [+{g[1]} similar]" if g is not None and g[1] else ""
+        print(text.rstrip() + extra, flush=True)
+        self.groups.pop(k, None)
+        self.groups[k] = [now, 0]
+        if len(self.groups) > self.MAX_GROUPS:
+            self.groups.pop(next(iter(self.groups)))
+
+    def feed(self, text):
+        self.buf += text
+        parts = re.split(r"[\r\n]", self.buf)
+        self.buf = parts.pop()
+        for p in parts:
+            self.line(p)
+
+    def close(self):
+        if self.buf:
+            self.line(self.buf)
+        skipped = sum(g[1] for g in self.groups.values())
+        if skipped:
+            print(f"   [{skipped} progress lines not shown, all in the log]", flush=True)
+        self.buf, self.groups = "", {}
+
+
+def _kill(proc):
+    """SIGTERM to the child's whole process group (bash, uv, nvcc, python),
+    then SIGKILL after KILL_GRACE_S."""
+    for sig, wait in ((signal.SIGTERM, KILL_GRACE_S), (signal.SIGKILL, None)):
+        try:
+            os.killpg(proc.pid, sig)
+        except ProcessLookupError:
+            return
+        try:
+            proc.wait(timeout=wait)
+            return
+        except subprocess.TimeoutExpired:
+            continue
+
+
+def stream(cmd, log, timeout_s, stall_s, progress_s, env=None, append=False):
+    """Runs cmd with its output in the notebook (Screen) and, complete, in the
+    log file. Stops it after timeout_s in total, or after stall_s without any
+    output. Returns (exit code, or None when stopped; "ok" | "timeout" |
+    "stall")."""
+    env = dict(os.environ if env is None else env, PYTHONUNBUFFERED="1")
+    screen = Screen(progress_s)
+    chunks = queue.Queue()
+    with open(log, "a" if append else "w", encoding="utf-8") as f:
+        head = "$ " + " ".join(cmd)
+        f.write(head + "\n")
+        f.flush()
+        print(f"{head}\n  log: {log}", flush=True)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env,
+                                start_new_session=True)
+
+        def reader():
+            while True:
+                b = os.read(proc.stdout.fileno(), 65536)
+                chunks.put(b)
+                if not b:
+                    return
+
+        threading.Thread(target=reader, daemon=True).start()
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        t0 = last = time.time()
+        reason = "ok"
+        while True:
+            try:
+                b = chunks.get(timeout=1.0)
+            except queue.Empty:
+                b = None
+            now = time.time()
+            if b == b"":
+                break
+            if b:
+                text = decoder.decode(b)
+                f.write(text)
+                f.flush()
+                screen.feed(text)
+                last = now
+            if now - t0 > timeout_s:
+                reason = "timeout"
+            elif stall_s is not None and now - last > stall_s:
+                reason = "stall"
+            if reason != "ok":
+                screen.close()
+                what = (f"over {timeout_s / 3600:.2f} h in total" if reason == "timeout"
+                        else f"no output for {stall_s / 60:.0f} min")
+                msg = f"*** {reason.upper()}: {what}, stopping the process ***"
+                f.write("\n" + msg + "\n")
+                f.flush()
+                print(msg, flush=True)
+                _kill(proc)
+                break
+        screen.close()
+        code = None
+        if reason == "ok":  # output closed: the process ends now, or is stopped
+            try:
+                code = proc.wait(timeout=KILL_GRACE_S)
+            except subprocess.TimeoutExpired:
+                reason = "stall"
+                print(f"*** STALL: output closed but the process still runs after {KILL_GRACE_S} s, "
+                      "stopping it ***", flush=True)
+                _kill(proc)
+        f.write(f"\n[{reason}, exit {code}, {(time.time() - t0) / 3600:.2f} h]\n")
+    return code, reason
+
+
+# ---------------------------------------------------------------- notebook API
+
+def setup(method, timeout_min, stall_min, progress_s=30):
     """bash methods/<method>/setup_kaggle.sh with PYTHON = this kernel's
-    interpreter; output streamed to the notebook."""
+    interpreter, shown in the notebook; raises if it fails or hangs."""
     script = os.path.join(method_dir(method), "setup_kaggle.sh")
-    env = dict(os.environ, PYTHON=sys.executable)
+    log = os.path.join(tempfile.gettempdir(), f"setup_{method}.log")
     t0 = time.time()
-    subprocess.run(["bash", script], env=env, check=True)
-    print(f"setup {method}: {time.time() - t0:.0f} s")
+    code, reason = stream(["bash", script], log, timeout_min * 60, stall_min * 60, progress_s,
+                          env=dict(os.environ, PYTHON=sys.executable))
+    if code != 0:
+        why = f"exit code {code}" if reason == "ok" else f"stopped ({reason})"
+        raise RuntimeError(f"setup {method} FAILED: {why}; see the output above (log: {log})")
+    print(f"=== setup {method}: ok, {time.time() - t0:.0f} s", flush=True)
 
 
-def tail(path, n):
-    with open(path, encoding="utf-8", errors="replace") as f:
-        return "".join(f.readlines()[-n:])
-
-
-def run(method, dataset, out, checkpoint_every, timeout_h, resume=False, no_map=False, tail_lines=25):
+def run(method, dataset, out, checkpoint_every, timeout_h, stall_min, progress_s=30, resume=False, no_map=False):
     """adapter.py run on one dataset, output to <out>/<method>__<scene>_<variant>/
-    (log: run.log there), the zip next to it. Returns the zip path, None if
-    the run failed or timed out (resume it in a later session)."""
+    (complete log: run.log there), the zip next to it; output shown in the
+    notebook as it comes. Stopped after timeout_h, or after stall_min without
+    output. Returns the zip path; None if the run failed, timed out or hung
+    (resume it with resume=True, from its checkpoints)."""
     if not os.path.isdir(os.path.join(dataset, "results")):
         raise FileNotFoundError(f"{dataset}: no results/ (a MonoGS dataset folder?)")
     adapter = os.path.join(method_dir(method), "adapter.py")
@@ -77,33 +233,21 @@ def run(method, dataset, out, checkpoint_every, timeout_h, resume=False, no_map=
            "--checkpoint_every", str(int(checkpoint_every))]
     cmd += ["--resume"] if resume else []
     cmd += ["--no_map"] if no_map else []
-    zips_before = set(glob.glob(os.path.join(out, f"{os.path.basename(work)}__*.zip")))
-    log = os.path.join(work, LOG_NAME)
-    print(f"{method} on {dataset}\n  log: {log}")
+    pattern = os.path.join(out, f"{os.path.basename(work)}__*.zip")
+    zips_before = set(glob.glob(pattern))
+    print(f"=== {method} on {dataset}", flush=True)
     t0 = time.time()
-    with open(log, "a" if resume else "w", encoding="utf-8") as f:
-        f.write(f"$ {' '.join(cmd)}\n")
-        f.flush()
-        proc = subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT)
-        try:
-            code = proc.wait(timeout=timeout_h * 3600)
-        except subprocess.TimeoutExpired:
-            proc.terminate()
-            try:
-                proc.wait(timeout=KILL_GRACE_S)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-            code = None
-    print(tail(log, tail_lines))
-    new = sorted(set(glob.glob(os.path.join(out, f"{os.path.basename(work)}__*.zip"))) - zips_before)
-    status = "TIMEOUT" if code is None else f"exit {code}"
-    print(f"{status} after {(time.time() - t0) / 3600:.2f} h")
+    code, reason = stream(cmd, os.path.join(work, LOG_NAME), timeout_h * 3600, stall_min * 60, progress_s,
+                          append=resume)
+    new = sorted(set(glob.glob(pattern)) - zips_before)
+    status = ("OK" if code == 0 else f"FAILED, exit code {code}") if reason == "ok" else f"STOPPED ({reason})"
+    print(f"=== {method} on {dataset}: {status}, {(time.time() - t0) / 3600:.2f} h", flush=True)
     if code == 0 and len(new) == 1:
-        print(f"zip: {new[0]}")
+        print(f"zip: {new[0]}", flush=True)
         return new[0]
-    if code is None or code != 0:
-        print(f"no zip: resume later with run(..., resume=True) from the checkpoints in {work}")
+    if code != 0:
+        print(f"no zip: fix the error above, or resume with run(..., resume=True) from the checkpoints in {work}",
+              flush=True)
         return None
     raise RuntimeError(f"exit 0 but {len(new)} new zips for {work}: {new}")
 
