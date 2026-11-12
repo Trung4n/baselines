@@ -47,6 +47,7 @@ python baselines/common/compare_figures.py --out <png> --column "Đồ án=<dir>
 ## FPS
 
 - FPS = số frame / thời gian thực của vòng SLAM (tracking và mapping) trên toàn chuỗi. Giống `Total FPS` của MonoGS: tính từ lúc bắt đầu tới lúc frame cuối được xử lý, **không tính** phần đánh giá cuối và refine.
+- **Thời gian đọc ảnh đầu vào được tính** (quyết định 2026-11-13). MonoGS đọc từng frame bên trong khoảng được đo: `dataset[idx]`, và `FramePrefetcher` đọc trước một frame trên luồng phụ, từ `start.record()` tới `end.record()` trong `slam.py`. Một phương pháp đọc hết ảnh vào bộ nhớ **trước** vòng lặp (GS-ICP) vì vậy phải cộng thời gian đó vào. Để minh bạch, `timing.json` ghi thêm thời gian vòng lặp riêng (`loop_s`, `fps_loop_only`), và bảng kết quả nêu cả hai số. Thời gian khởi tạo một lần (dựng môi trường, nạp model LPIPS) không tính.
 - Ghi vào `timing.json`:
   - `frames`, `seconds`;
   - `gpu`: tên GPU, có dùng một hay hai GPU;

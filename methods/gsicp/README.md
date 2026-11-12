@@ -48,7 +48,7 @@ Gốc: `gs_icp_slam.py`, tức chế độ "Limited to 30 FPS", chế độ đ�
   - mô hình của đồ án nhắm tới tracking quang trắc, và lợi ích của nó nằm ở bản đồ albedo và ở thiết lập camera đơn.
 - **Mapping chạy song song với tracking và dừng khi tracking xong.** Chất lượng bản đồ vì vậy phụ thuộc vào số vòng mapping kịp chạy, tức là phụ thuộc tốc độ máy. Số vòng này ghi trong `method.json` (`mapping_iterations`).
 - **Keyframe:** gồm keyframe tracking (khi tỉ lệ điểm trùng < `keyframe_th`) và keyframe mapping (mỗi 10 frame kể từ keyframe tracking gần nhất). Mapping chỉ tối ưu trên các keyframe này, nên các frame chấm ảnh là frame chưa dùng để tối ưu, giống MonoGS và khác SplaTAM.
-- **FPS** là FPS của vòng tracking ("System FPS" của GS-ICP), bị giới hạn ở 30. GICP chạy trên CPU (4 nhân trên Kaggle). Không tính thời gian nạp toàn bộ ảnh vào bộ nhớ trước vòng lặp (ghi riêng ở `preload_s`).
+- **FPS** tính cả thời gian đọc ảnh, cùng cách MonoGS tính `Total FPS` (`PROTOCOL.md`): GS-ICP đọc hết ảnh trước vòng lặp, MonoGS đọc từng frame bên trong khoảng được đo. `timing.json` ghi thêm `loop_s` và `fps_loop_only` ("System FPS" của GS-ICP, bị giới hạn ở 30; GICP chạy trên CPU, 4 nhân trên Kaggle).
 - Chỉ dùng một GPU (`cuda:0`) cho cả hai tiến trình.
 
 ## Kỹ thuật
@@ -63,4 +63,9 @@ Gốc: `gs_icp_slam.py`, tức chế độ "Limited to 30 FPS", chế độ đ�
 
 ## Đã chạy
 
-(chưa có)
+| Ngày | Biến thể | ATE all (cm) | PSNR / SSIM / LPIPS | FPS | Kết quả |
+|---|---|---|---|---|---|
+| 2026-11-12 | office0 / lit | 0.032 | 16.71 / 0.758 / 0.289 | 5.14 (vòng tracking 10.77) | `results/gsicp__office0_lit/2026-11-12-14-04-31` |
+| 2026-11-12 | office0 / even | 0.041 | 44.25 / 0.987 / 0.013 | 3.13 (vòng tracking 10.57) | `results/gsicp__office0_even/2026-11-12-14-05-04` |
+
+Python 3.13, torch 2.11.0+cu130, PCL 1.14 trên Kaggle. Build và `hooks.py` chạy đúng ngay lần đầu, mỗi run một phiên. Phân tích ở `RESULTS.md`, mục "GS-ICP SLAM trên `office0`".

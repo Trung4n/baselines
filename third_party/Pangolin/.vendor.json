@@ -1,0 +1,14 @@
+{
+  "name": "Pangolin",
+  "url": "https://github.com/stevenlovegrove/Pangolin",
+  "commit": "aff6883c83f3fd7e8268a9715e84266c42e2efe3",
+  "tag": "v0.8",
+  "commit_date": "2022-05-02 18:32:10 -0700",
+  "used_by": "ORB_SLAM3 (find_package(Pangolin REQUIRED); its viewer is off at run time but the library links against Pangolin). Ubuntu 24.04 has no Pangolin package. v0.8: OpenGL through GLEW, C++17.",
+  "changes": [
+    "submodules not copied (empty in the repo): components/pango_python/pybind11 (Python console, built off) and scripts/vcpkg (Windows package manager)",
+    ".gitignore renamed .gitignore.upstream: its 'build*' rule would make the baselines repo skip .github/workflows/build.yml"
+  ],
+  "build": "methods/orbslam3/setup_kaggle.sh builds it with examples, tools, Python and the optional video/image back-ends off",
+  "check": "every other file equals the tag (git status against the original clone, 2026-11-12)"
+}

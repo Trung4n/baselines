@@ -1,0 +1,13 @@
+{
+  "name": "ORB_SLAM3",
+  "url": "https://github.com/UZ-SLAMLab/ORB_SLAM3",
+  "commit": "4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4",
+  "commit_date": "2022-02-10 09:26:50 +0100",
+  "version": "v1.0",
+  "changes": [
+    "removed, not used to build or run RGB-D SLAM: every *.txt under Examples/ and Examples_old/ (timestamps, IMU and association files of EuRoC/TUM/KITTI sequences, 274 MB), evaluation/ (EuRoC/TUM ground truth and scripts, 51 MB), Calibration_Tutorial.pdf; the *.cc example sources stay (CMakeLists.txt lists them)",
+    ".gitignore renamed .gitignore.upstream: it ignores every file without an extension (LICENSE) and 'Time*' (Thirdparty/DBoW2/DUtils/Timestamp.cpp, g2o/stuff/timeutil.cpp), which the baselines repo would then not commit"
+  ],
+  "build_patches": "not applied here: methods/orbslam3/setup_kaggle.sh builds a COPY: -std=c++11 -> -std=c++17 (Pangolin 0.8 is C++17), CXXFLAGS '-include cstdint' (GCC 13), CMAKE_POLICY_VERSION_MINIMUM=3.5 (CMake 4 and cmake_minimum_required 2.8), the adapter's driver methods/orbslam3/rgbd_monogs.cc added as one more executable; only the ORB_SLAM3 library, DBoW2, g2o and that driver are built (Sophus is header-only here, its tests are not built)",
+  "check": "every other file equals the commit (git status against the original clone, 2026-11-12)"
+}

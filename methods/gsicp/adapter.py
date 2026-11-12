@@ -219,13 +219,20 @@ def export(args, work, hook, n, cal, commit, scene, variant, started_at, params)
     colors, _ = protocol.dataset_frames(args.dataset)
     runzip.write_figures(os.path.join(out, "renders"), colors, os.path.join(out, "figures"))
 
+    # FPS as MonoGS's "Total FPS" (PROTOCOL.md): MonoGS reads each frame inside
+    # its timed run, so GS-ICP's reading of the frames counts too, although
+    # GS-ICP does all of it before the loop. Loop alone kept for reference.
     runzip.write_json(os.path.join(out, "timing.json"), {
-        "frames": n, "seconds": tt["loop_s"], "gpu": tt["gpu"] + ", 1 GPU (cuda:0; tracking with fast_gicp on CPU)",
-        "what": ("GS-ICP's tracking loop, first to last frame (its own 'System FPS'), with mapping running "
-                 "alongside in its own process and stopping at the end of tracking; tracking is capped at 30 FPS "
-                 "(gs_icp_slam.py, as replica.sh). Excludes the preload of every frame into memory before the "
-                 f"loop ({tt['preload_s']:.1f} s), the scene.ply save and the export"),
-        "sessions": 1, "preload_s": tt["preload_s"]})
+        "frames": n, "seconds": tt["preload_s"] + tt["loop_s"],
+        "gpu": tt["gpu"] + ", 1 GPU (cuda:0; tracking with fast_gicp on CPU)",
+        "what": ("GS-ICP's tracker process from its start: reading every frame into memory "
+                 f"({tt['preload_s']:.1f} s; GS-ICP does it before the loop, MonoGS inside its timed run) plus the "
+                 f"tracking loop, first to last frame ({tt['loop_s']:.1f} s, GS-ICP's own 'System FPS' = "
+                 f"{n / tt['loop_s']:.2f}), with mapping alongside in its own process, stopping at the end of "
+                 "tracking; tracking capped at 30 FPS (gs_icp_slam.py, as replica.sh). Excludes the scene.ply save "
+                 "and the export"),
+        "sessions": 1, "preload_s": tt["preload_s"], "loop_s": tt["loop_s"],
+        "fps_loop_only": n / tt["loop_s"]})
     runzip.write_json(os.path.join(out, "calibration.json"), cal)
     notes = (f"GS-ICP SLAM gs_icp_slam.py (tracking capped at 30 FPS) with replica.sh parameters; changed: camera "
              f"(MonoGS calibration), downsample_rate scaled with the image width ({params['downsample_rate']}), "
@@ -240,7 +247,8 @@ def export(args, work, hook, n, cal, commit, scene, variant, started_at, params)
     with open(os.path.join(out, "notes.txt"), "w", encoding="utf-8") as f:
         f.write(notes)
     print(f"{n} poses, {len(keyframes)} keyframes, {len(frames)} renders, {ms['gaussians']} Gaussians, "
-          f"{n / tt['loop_s']:.1f} FPS -> {out}", flush=True)
+          f"{n / (tt['preload_s'] + tt['loop_s']):.2f} FPS with frame reading "
+          f"({n / tt['loop_s']:.1f} tracking loop only) -> {out}", flush=True)
 
 
 def main(argv=None):
