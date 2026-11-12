@@ -49,7 +49,10 @@ export CXXFLAGS="${CXXFLAGS:-} -include cstdint"
 # 2026-11-12: "libOpenGL.so: undefined reference to `_glapi_tls_Current'").
 # ORB-SLAM3 is CPU only, so this script builds, and the adapter runs the
 # driver, without LD_LIBRARY_PATH; -rpath-link points the linker at the
-# system's multiarch library directory as well.
+# system's multiarch library directory as well (this is what fixed the link,
+# 2026-11-12). At run time the loader still takes the NVIDIA set of GL
+# libraries (/usr/local/nvidia/lib64, through the system loader config); that
+# set is self-consistent and the driver loads and runs (ldd below shows it).
 echo "LD_LIBRARY_PATH was: ${LD_LIBRARY_PATH:-<unset>} (unset for ORB-SLAM3)"
 for d in $(echo "${LD_LIBRARY_PATH:-}" | tr ':' ' ') /usr/lib/x86_64-linux-gnu; do
     ls "$d"/libGLdispatch.so* 2>/dev/null | sed 's/^/  found: /' || true
@@ -120,10 +123,13 @@ fi
 # adapter runs it, without LD_LIBRARY_PATH.
 DRV="$BUILD/ORB_SLAM3/Examples/RGB-D/rgbd_monogs"
 ldd "$DRV" | grep -E "GL|pango|ORB_SLAM3|not found" | sed 's/^/  ldd: /' || true
-if "$DRV" 2>&1 | grep -q "Usage: rgbd_monogs"; then
+# Without arguments it prints its usage and exits 1 (by design): keep the
+# output and test that, not the exit status (pipefail would see the 1).
+out="$("$DRV" 2>&1 || true)"
+if grep -q "Usage: rgbd_monogs" <<<"$out"; then
     echo "rgbd_monogs ok: $DRV"
 else
-    "$DRV" || true
+    echo "$out"
     echo "rgbd_monogs does not start" >&2
     exit 1
 fi
