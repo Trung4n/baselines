@@ -18,11 +18,17 @@ import sys
 
 import numpy as np
 
-REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+COMMON = os.path.dirname(os.path.abspath(__file__))
+# The MonoGS repo, when baselines/ sits inside it (local scoring). On Kaggle
+# the baselines repo is cloned alone and this folder does not exist.
+REPO = os.path.dirname(os.path.dirname(COMMON))
 
-# Camera intrinsics and depth scale of the MonoGS Replica datasets (CLAUDE.md:
-# adapters read them from here, never copy the numbers).
+# Camera intrinsics and depth scale of the MonoGS Replica datasets. The
+# source is MonoGS's base config; adapters run without the MonoGS repo, so
+# they read a verbatim copy of its Dataset.Calibration block, which
+# score_zip.py checks against the source before scoring (check_calibration).
 CALIB_CONFIG = os.path.join(REPO, "configs", "rgbd", "replica", "base_config.yaml")
+CALIB_COPY = os.path.join(COMMON, "calibration.yaml")
 
 
 def monogs_on_path():
@@ -54,10 +60,11 @@ def dataset_frames(dataset):
     return colors, depths
 
 
-def calibration(path=CALIB_CONFIG):
-    """{width, height, fx, fy, cx, cy, depth_scale} from Dataset.Calibration
-    of the MonoGS config (metres = PNG value / depth_scale). Undistorted
-    images only: the adapters pass no distortion model on."""
+def calibration(path=CALIB_COPY):
+    """{width, height, fx, fy, cx, cy, depth_scale} from a Dataset.Calibration
+    block (metres = PNG value / depth_scale): by default the copy in
+    baselines/common, CALIB_CONFIG for MonoGS's own. Undistorted images only:
+    the adapters pass no distortion model on."""
     import yaml
 
     with open(path, encoding="utf-8") as f:
@@ -73,6 +80,18 @@ def calibration(path=CALIB_CONFIG):
     if cal["distorted"] or any(cal.get(k, 0.0) != 0.0 for k in ("k1", "k2", "p1", "p2", "k3")):
         raise ValueError(f"{path}: distorted calibration; the adapters assume undistorted images")
     return {k: cal[k] for k in keys if k != "distorted"}
+
+
+def check_calibration(used):
+    """Raises unless `used` (the calibration an adapter ran with, as written
+    to its calibration.json) equals MonoGS's base config. Needs the MonoGS
+    repo, i.e. runs at scoring time."""
+    if not os.path.isfile(CALIB_CONFIG):
+        raise FileNotFoundError(f"{CALIB_CONFIG}: score inside the MonoGS repo")
+    source = calibration(CALIB_CONFIG)
+    if {k: float(v) for k, v in used.items()} != {k: float(v) for k, v in source.items()}:
+        raise ValueError(f"run calibration {used} differs from {CALIB_CONFIG}: {source}")
+    return source
 
 
 def gt_poses_c2w(dataset):

@@ -1,0 +1,12 @@
+{
+  "name": "SplaTAM",
+  "url": "https://github.com/spla-tam/SplaTAM",
+  "commit": "da6bbcd24c248dc884ac7f49d62e91b841b26ccc",
+  "commit_date": "2024-06-19 11:46:15 +0200",
+  "changes": [
+    "assets/ removed (README images only, 15 MB, not used by any code)",
+    "diff-gaussian-rasterization-w-depth.git submodule placeholder removed: vendored separately as third_party/diff-gaussian-rasterization-w-depth at the commit the submodule pins (cb65e4b8)",
+    ".gitignore renamed .gitignore.upstream: its 'data/' rule would make the baselines repo skip configs/data/*.yaml"
+  ],
+  "check": "every other file equals the commit (git status against the original clone, 2026-11-13)"
+}

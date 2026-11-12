@@ -25,7 +25,7 @@ Không so ATE với DarkGS, SpotlessGS, SunFaded: chúng cần pose cho trước
 
 - **Không rò rỉ ground truth.** Đầu vào chỉ gồm `results/frame*.jpg` và `results/depth*.png` của thư mục dataset MonoGS. `traj.txt` chỉ dùng để chấm. Không đọc EXR, pass albedo hay pháp tuyến. Không khởi tạo bằng pose ground truth. Riêng pose frame đầu: MonoGS đặt nó bằng pose tham chiếu, và việc căn chỉnh SE(3) làm điều này không ảnh hưởng ATE. Phương pháp khác cứ khởi tạo theo cách của chúng.
 - **Chấm bằng `common/score.py`**, không bằng script đánh giá riêng của phương pháp. Số phương pháp tự báo chỉ ghi vào cột ghi chú để đối chiếu.
-- **Không gán cứng** nội tại camera hay thang độ sâu trong adapter. Đọc từ `configs/rgbd/replica/base_config.yaml` (`Dataset.Calibration`).
+- **Không gán cứng** nội tại camera hay thang độ sâu trong adapter. Nguồn là `configs/rgbd/replica/base_config.yaml` (`Dataset.Calibration`). Adapter chạy trên Kaggle không có repo MonoGS, nên đọc bằng `protocol.calibration()` từ `common/calibration.yaml`, là bản chép nguyên văn khối đó. `score_zip.py` từ chối run nếu `calibration.json` của run khác `base_config.yaml`. Đổi nội tại trong MonoGS thì chép lại file này, không sửa tay.
 - **Giữ nguyên tham số mặc định** của từng phương pháp cho Replica, chỉ đổi những gì bắt buộc: độ phân giải 600×340, nội tại, thang độ sâu, đường dẫn. Mọi thay đổi khác ghi vào README của phương pháp, kèm lý do.
 - Cùng loại GPU (Kaggle T4). FPS đo đúng như `PROTOCOL.md`.
 - Mỗi cấu hình chạy ít nhất 2 lần nếu quota cho phép. Dao động của đồ án là 0.37 cm ATE và 0.8 dB PSNR (D139).
@@ -47,13 +47,22 @@ Không so ATE với DarkGS, SpotlessGS, SunFaded: chúng cần pose cho trước
 
 ## Quy trình cho một phương pháp
 
-1. Dựng môi trường trên Kaggle theo `methods/<name>/README.md`. Ghi commit của repo phương pháp.
-2. Viết adapter `methods/<name>/adapter.py` (hoặc script). Adapter đọc dataset MonoGS, chạy phương pháp và ghi ra:
+Phân công: **người dùng chạy trên Kaggle, tải về một file zip cho mỗi lần chạy, rồi đưa cho Claude chấm và phân tích cục bộ.** Notebook Kaggle chỉ clone repo `baselines`, không clone repo đồ án. Mã nguồn các phương pháp đã chép sẵn vào `third_party/` của repo, ghim commit trong `.vendor.json` của từng thư mục, theo quy tắc ở `third_party/README.md`: không có `.git` lồng, kiểm `.gitignore` của repo được chép.
+
+1. **Một notebook chung cho mọi phương pháp:** `run_baseline.ipynb` ở gốc repo. Người dùng đặt `METHOD = "<name>"` và danh sách `RUNS`. Notebook gọi `common/kaggle_runner.py`: `setup(METHOD)`, rồi `run(...)` cho từng dataset (tuần tự, log vào `<work>/run.log`, có timeout), cuối cùng `collect(METHOD, OUT)` để kiểm zip và dọn thư mục làm việc. Mỗi phiên notebook chỉ chạy một phương pháp, vì gói của hai phương pháp có thể trùng tên.
+
+   Thêm một phương pháp là thêm thư mục `methods/<name>/` (tên viết thường), không sửa notebook. Thư mục cần đúng hai file theo giao diện chung:
+   - `setup_kaggle.sh`: cài phụ thuộc vào Python của notebook (biến `PYTHON`, do runner đặt) bằng `uv`, build extension cho GPU đang có (đọc compute capability, không gán cứng), gọi hai lần trong một phiên vẫn an toàn;
+   - `adapter.py run --dataset <thư mục> --work <thư mục> --checkpoint_every <n> [--resume] [--no_map]`: mọi tham số khác của phương pháp có mặc định trỏ vào `third_party/`. Adapter phải báo lỗi với tùy chọn nó không làm được (ví dụ checkpoint), không được lặng lẽ bỏ qua.
+
+   Mã của phương pháp lấy từ `third_party/<repo>`. Windows không phân biệt hoa thường, nên `methods/SplaTAM` và `methods/splatam` là **cùng một thư mục**: không clone repo phương pháp vào `methods/`, và kiểm `git status` rằng đường dẫn mới có chữ thường.
+2. Adapter `methods/<name>/adapter.py` đọc dataset MonoGS, chạy phương pháp, rồi đóng **một zip** `<method>__<scene>_<variant>__<thời điểm bắt đầu>.zip` theo bố cục ở `PROTOCOL.md` (mục "Gói kết quả của một lần chạy"). Zip gồm:
    - quỹ đạo TUM với cột thời gian là chỉ số frame (`common/protocol.write_tum`);
    - `keyframes.txt`, nếu phương pháp có khái niệm keyframe;
    - render `<idx:06d>.npy` tại pose ước lượng, cho các frame `protocol.required_renders(N, keyframes)`. Tập này gồm các frame chấm chỉ số và 5 frame chung để so ảnh: 100, 500, 825, 1125, 1750, render kể cả khi là keyframe;
-   - `timing.json`.
-3. Chạy `common/score.py --wandb`, kết quả vào `results/<method>__<scene>_<variant>/<thời gian>/`.
+   - `figures/`, `timing.json`, `calibration.json`, `method.json`, `summary.json`;
+   - `run/`: config, log, bản đồ cuối.
+3. Chấm cục bộ trong repo và môi trường MonoGS (WSL: `~/bin/micromamba run -n MonoGS`). Lệnh `common/score_zip.py --zip <zip> --dataset <dataset cục bộ> --wandb` giải nén vào `runs/` (bị git bỏ qua), kiểm nội tại, cảnh và số frame, rồi chạy `score.py` vào `results/<method>__<scene>_<variant>/<thời điểm bắt đầu>/`. Bản ghi của run nằm ở `run/` trong thư mục đó, gồm cả sha256 của zip.
 4. Thêm một dòng vào bảng chi tiết của `RESULTS.md`, cập nhật bảng tổng, ghi mọi khác biệt so với mặc định của phương pháp.
 
 Với MonoGS của đồ án: `common/from_monogs_record.py --record record/runs/<run> --figures --dataset <...>` ghi ra quỹ đạo, keyframe và ảnh 5 frame chung từ bản đồ trong record (`--map final` hoặc `final_refined`), sau đó chạy `score.py --no_render`. PSNR, SSIM, LPIPS lấy từ log của MonoGS. Cách này cho ATE trên mọi frame theo cùng giao thức.
@@ -66,19 +75,24 @@ Với MonoGS của đồ án: `common/from_monogs_record.py --record record/runs
 
 ## Đưa thư mục này lên Kaggle
 
-`baselines/` nằm trong `.gitignore` của repo chính, nên `git clone` repo trên Kaggle sẽ **không** có nó. Hai cách:
+`baselines/` nằm trong `.gitignore` của repo chính và là repo git riêng, <https://github.com/Trung4n/baselines>. Trên Kaggle chỉ clone repo này, đặt ngoài `/kaggle/working`, để output chỉ còn các zip:
 
-- `git init` riêng trong `baselines/` và push lên một repo GitHub riêng, rồi clone trên Kaggle vào `LunoGS/baselines`. Cách này giữ được lịch sử.
-- Hoặc nén và upload thành một Kaggle dataset, rồi copy vào `LunoGS/baselines`.
+```
+!git clone --depth 1 https://github.com/Trung4n/baselines /tmp/code/baselines
+```
 
-Adapter chạy trong môi trường của phương pháp khác, nên `common/protocol.py` không đưa repo MonoGS vào `sys.path` lúc import (gói `utils` của MonoGS trùng tên với gói của SplaTAM). Chỉ `ate()` và `RenderScorer` gọi `monogs_on_path()`. Adapter đọc nội tại camera bằng `protocol.calibration()`.
+Cài phụ thuộc bằng `uv` như `run-monogs` (`pip install uv`, rồi `uv pip install --system --python {sys.executable} --break-system-packages ...`).
 
-`common/` import code đánh giá của MonoGS (`utils/eval_utils.py`, `gaussian_splatting/utils/*`), nên `baselines/` phải nằm **bên trong** repo MonoGS đã clone, và chạy trong môi trường có `evo` và `torchmetrics` (môi trường MonoGS). Phương pháp khác chạy trong môi trường riêng; chỉ bước chấm điểm chạy trong môi trường MonoGS.
+Phần chạy trên Kaggle (adapter, cùng `protocol.calibration`, `required_renders`, `write_tum`, `to_png8`, `load_render`) không cần repo MonoGS. Vì vậy `common/protocol.py` không đưa repo MonoGS vào `sys.path` lúc import; gói `utils` của MonoGS cũng trùng tên với gói của SplaTAM. Chỉ `ate()` và `RenderScorer` gọi `monogs_on_path()`.
+
+Phần chấm (`score.py`, `score_zip.py`, `from_monogs_record.py`) import code đánh giá của MonoGS (`utils/eval_utils.py`, `gaussian_splatting/utils/*`). Do đó chỉ chạy được khi `baselines/` nằm **bên trong** repo MonoGS, trong môi trường MonoGS (có `evo` và `torchmetrics`): đó là máy cục bộ.
 
 ## Tình trạng
 
 - [x] Giao thức, `common/`, `RESULTS.md` cùng số của đồ án
-- [ ] SplaTAM: adapter và notebook Kaggle đã viết (2026-11-12, `methods/splatam/`), phần không cần GPU đã kiểm cục bộ; **chưa chạy** `office0` `lit` và `even`
+- [x] Đóng gói zip và `score_zip.py` (2026-11-13). Đã thử với một run giả: quỹ đạo tham chiếu cộng lệch đã biết, render bằng ảnh quan sát cộng nhiễu σ = 0.01. Kết quả PSNR 40.17 dB, ATE đúng như tính tay. Zip giả 402 MiB, phần lớn là render; render thật nén tốt hơn ảnh nhiễu.
+- [x] Notebook chung `run_baseline.ipynb` và `common/kaggle_runner.py` (2026-11-13). Đã thử với một phương pháp giả: run xong ra zip, run lỗi, run quá giờ, chạy tiếp thì log ghi nối, `collect` giữ thư mục của run khác.
+- [ ] SplaTAM: `adapter.py` và `setup_kaggle.sh` đã viết (`methods/splatam/`), phần không cần GPU đã kiểm cục bộ; **chưa chạy** `office0` `lit` và `even`
 - [ ] ORB-SLAM3: như trên
 - [ ] GS-ICP SLAM: như trên
 - [ ] MonoGS gốc chạy lại bằng code hiện tại (`lit`, `even`, có `--record`), chấm bằng `from_monogs_record.py`

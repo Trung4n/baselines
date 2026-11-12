@@ -53,6 +53,31 @@ python baselines/common/compare_figures.py --out <png> --column "Đồ án=<dir>
   - `what`: đo từ đâu tới đâu.
 - Chạy trên cùng loại GPU với MonoGS (Kaggle T4). MonoGS dùng hai GPU (mapping trên GPU 1). Nếu phương pháp khác chỉ chạy một GPU thì ghi rõ.
 
+## Gói kết quả của một lần chạy
+
+Phương pháp khác chạy trên Kaggle (không có repo MonoGS) và mỗi lần chạy cho đúng **một zip** `<method>__<scene>_<variant>__<thời điểm bắt đầu>.zip`. Trong zip có một thư mục cùng tên, chứa:
+
+| File | Nội dung | Bắt buộc |
+|---|---|---|
+| `traj_est.tum` | pose camera-to-world, cột thời gian là chỉ số frame | có |
+| `keyframes.txt` | keyframe của phương pháp, mỗi dòng một chỉ số | nếu có keyframe |
+| `renders/<idx:06d>.npy` | render float tại pose ước lượng, mọi frame của `protocol.required_renders` | nếu có bản đồ kết xuất |
+| `figures/<idx>_render.png`, `_obs.jpg` | 5 frame chung, để xem nhanh trước khi chấm | nếu có bản đồ kết xuất |
+| `timing.json` | `frames`, `seconds`, `gpu`, `what` (mục FPS) | có |
+| `calibration.json` | nội tại và `depth_scale` đã dùng, kiểm với `base_config.yaml` khi chấm | có |
+| `method.json` | `method`, `scene`, `variant`, `started_at`, `commit`, `frames`, `notes`, phiên bản, config đã đổi | có |
+| `notes.txt` | khác biệt so với mặc định, đi vào `metrics.json` | có |
+| `summary.json` | số frame, keyframe, FPS, danh sách file | có |
+| `run/` | config đầy đủ, log, thời gian từng phiên, bản đồ cuối | có (bản đồ tùy chọn) |
+
+Chấm cục bộ trong repo và môi trường MonoGS:
+
+```
+python baselines/common/score_zip.py --zip <zip> --dataset <thư mục dataset cục bộ> --wandb
+```
+
+Script giải nén vào `baselines/runs/` (git bỏ qua), rồi kiểm nội tại, cảnh, biến thể và số frame. Sau đó nó chạy `score.py` vào `baselines/results/<method>__<scene>_<variant>/<started_at>/` và chép bản ghi của run (trừ render và bản đồ) vào `run/`, kèm `source.json` (tên, cỡ, sha256 của zip). Thư mục kết quả đã có thì không bao giờ ghi đè.
+
 ## Ghi lại cho mỗi lần chạy
 
 `score.py` ghi các file sau vào `baselines/results/<method>__<scene>_<variant>/<thời gian>/`:

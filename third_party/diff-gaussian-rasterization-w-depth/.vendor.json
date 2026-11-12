@@ -1,0 +1,12 @@
+{
+  "name": "diff-gaussian-rasterization-w-depth",
+  "url": "https://github.com/JonathonLuiten/diff-gaussian-rasterization-w-depth",
+  "commit": "cb65e4b86bc3bd8ed42174b72a62e8d3a3a71110",
+  "commit_date": "2023-09-19 11:01:57 -0400",
+  "used_by": "SplaTAM requirements.txt pins this commit; its submodule also points to it",
+  "changes": [
+    "third_party/glm/doc and third_party/glm/test removed (18 MB, not used by the build: setup.py only adds third_party/glm/ to the include path for <glm/glm.hpp>); glm is committed inside this repo, no separate submodule commit"
+  ],
+  "build_patch": "not applied here: the Kaggle notebook builds a COPY with '#include <cstdint>' added to cuda_rasterizer/rasterizer_impl.h if missing (newer GCC), sources here stay as the commit",
+  "check": "every other file equals the commit (git status against the original clone, 2026-11-13)"
+}

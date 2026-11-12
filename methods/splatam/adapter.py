@@ -1,28 +1,31 @@
-"""SplaTAM (Keetha et al., CVPR 2024) on a MonoGS Replica-format dataset, with
-the outputs baselines/common/score.py scores (baselines/PROTOCOL.md).
+"""SplaTAM (Keetha et al., CVPR 2024) on a MonoGS Replica-format dataset. Runs
+on Kaggle with the baselines repo alone (no MonoGS repo, no MonoGS
+environment: SplaTAM's rasterizer installs under the same module name as
+MonoGS's) and ends with ONE zip per run, scored later on the local machine
+by baselines/common/score_zip.py (baselines/PROTOCOL.md).
 
-Runs in SplaTAM's OWN environment: its rasterizer installs under the same
-module name as MonoGS's (diff_gaussian_rasterization). score.py runs
-afterwards in the MonoGS environment, on the files written by `export`.
+    python methods/splatam/adapter.py run --dataset <.../office0/lit> --work <dir> \
+        --checkpoint_every <n, 0 = off> [--resume] [--no_map] [--splatam <source, default third_party/SplaTAM>]
+    python methods/splatam/adapter.py export  --dataset <...> --work <dir> [--splatam <source>]
+    python methods/splatam/adapter.py package --dataset <...> --work <dir> [--no_map]
 
-    python baselines/methods/splatam/adapter.py run --splatam <SplaTAM clone> \
-        --dataset <.../office0/lit> --work <dir> --checkpoint_every <n, 0 = off> [--resume]
-    python baselines/methods/splatam/adapter.py export --splatam <clone> \
-        --dataset <...> --work <dir>
-
-`run` = stage the input, build the config, run SLAM (timed), then `export`.
+`run` = stage the input, build the config, run SLAM (timed), `export`, `package`.
 `export` = params.npz -> <work>/export/: traj_est.tum, keyframes.txt,
-renders/<idx:06d>.npy, timing.json, method.json.
+  renders/<idx:06d>.npy, figures/, timing.json, calibration.json, method.json,
+  notes.txt.
+`package` = <work>/../splatam__<scene>_<variant>__<start time>.zip: export/,
+  run/ (configs, timing segments, log, final map params.npz unless --no_map)
+  and summary.json.
 
 What differs from SplaTAM's own Replica run (configs/replica/splatam.py),
 all recorded in <work>/overrides.json and README.md:
-- resolution, intrinsics, depth scale: from protocol.calibration() (MonoGS's
-  configs/rgbd/replica/base_config.yaml), written into a copy of SplaTAM's
-  configs/data/replica.yaml (other keys kept);
-- paths, run name; W&B logging off (score.py logs the scored run);
+- resolution, intrinsics, depth scale: from protocol.calibration() (a copy
+  of MonoGS's Dataset.Calibration, checked against it at scoring), written
+  into a copy of SplaTAM's configs/data/replica.yaml (other keys kept);
+- paths, run name; W&B logging off (score_zip.py logs the scored run);
 - traj.txt: SplaTAM's loader reads one pose per frame. The staged dataset
   gives it IDENTITY matrices, so no reference pose can reach the run (the
-  real traj.txt is only read by score.py). SplaTAM's online ATE printouts
+  real traj.txt is only read when scoring). SplaTAM's online ATE printouts
   are therefore meaningless; tracking itself never reads them
   (tracking.use_gt_poses is False, checked);
 - SplaTAM's final self-evaluation is skipped (the scoring is score.py's);
@@ -32,14 +35,17 @@ all recorded in <work>/overrides.json and README.md:
 """
 import argparse
 import copy
+import datetime
 import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
 import types
+import zipfile
 
 import numpy as np
 
@@ -47,6 +53,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(HERE)), "common"))
 import protocol  # noqa: E402
 
+METHOD = "splatam"
+# The pinned SplaTAM copy of the baselines repo (third_party/README.md); its
+# .vendor.json gives the commit.
+VENDORED_SPLATAM = os.path.join(os.path.dirname(os.path.dirname(HERE)), "third_party", "SplaTAM")
 SPLATAM_CONFIG = os.path.join("configs", "replica", "splatam.py")
 SPLATAM_DATA_CONFIG = os.path.join("configs", "data", "replica.yaml")
 # SplaTAM's top-level folders are namespace packages (their init files are
@@ -56,14 +66,22 @@ SPLATAM_DATA_CONFIG = os.path.join("configs", "data", "replica.yaml")
 SPLATAM_PACKAGES = ("datasets", "utils", "scripts")
 CKPT_RE = re.compile(r"^params(\d+)\.npz$")
 KF_RE = re.compile(r"^keyframe_time_indices(\d+)\.npy$")
+# Files of <work> that go into run/ of the zip (besides the log and the map).
+RUN_FILES = ("config_resolved.json", "overrides.json", "data_replica.yaml", "timing_segments.json")
+LOG_NAME = "run.log"  # common/kaggle_runner.run writes the adapter's output to <work>/run.log
 
 
 # ---------------------------------------------------------------- helpers
 
-def sequence_name(dataset):
-    """<scene>_<variant>, as score.py names a run."""
+def scene_variant(dataset):
+    """(scene, variant) as score.py names a run: the dataset's parent folder
+    and folder."""
     d = os.path.normpath(dataset)
-    return f"{os.path.basename(os.path.dirname(d))}_{os.path.basename(d)}"
+    return os.path.basename(os.path.dirname(d)), os.path.basename(d)
+
+
+def sequence_name(dataset):
+    return "_".join(scene_variant(dataset))
 
 
 def import_splatam(splatam):
@@ -71,7 +89,7 @@ def import_splatam(splatam):
     for name in SPLATAM_PACKAGES:
         path = os.path.join(splatam, name)
         if not os.path.isdir(path):
-            raise FileNotFoundError(f"{path}: not a SplaTAM clone?")
+            raise FileNotFoundError(f"{path}: not a SplaTAM source tree?")
         mod = sys.modules.get(name)
         if mod is not None:
             if list(getattr(mod, "__path__", [])) != [path]:
@@ -110,6 +128,11 @@ def write_json(path, obj):
     os.replace(tmp, path)
 
 
+def read_json(path):
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
 def checkpoints(run_dir):
     """Frame indices of the COMPLETE checkpoints (params<i>.npz together with
     keyframe_time_indices<i>.npy) and all checkpoint files by index."""
@@ -126,7 +149,18 @@ def checkpoints(run_dir):
 
 
 def method_commit(splatam):
-    return subprocess.check_output(["git", "-C", splatam, "rev-parse", "HEAD"], text=True).strip()
+    """The SplaTAM commit: from the .vendor.json of the copy in
+    baselines/third_party, or from git for a clone."""
+    vendor = os.path.join(splatam, ".vendor.json")
+    if os.path.isfile(vendor):
+        return read_json(vendor)["commit"]
+    if os.path.isdir(os.path.join(splatam, ".git")):
+        return subprocess.check_output(["git", "-C", splatam, "rev-parse", "HEAD"], text=True).strip()
+    raise FileNotFoundError(f"{splatam}: neither .vendor.json nor a git clone, the commit is unknown")
+
+
+def run_dir_of(work, dataset):
+    return os.path.join(work, "splatam", sequence_name(dataset))
 
 
 # ---------------------------------------------------------------- staging
@@ -224,6 +258,7 @@ def run_slam(splatam, cfg, segments_path, segments):
 
     run_dir = os.path.join(cfg["workdir"], cfg["run_name"])
     seg = {"start_frame": cfg["checkpoint_time_idx"] if cfg["load_checkpoint"] else 0,
+           "started_at": datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
            "gpu": torch.cuda.get_device_name(0), "checkpoint_seconds": {}, "end_seconds": None}
     segments.append(seg)
     t0 = None
@@ -250,6 +285,7 @@ def run_slam(splatam, cfg, segments_path, segments):
     S.save_params_ckpt = timed_checkpoint
     S.eval = end_of_loop
     S.seed_everything(seed=cfg["seed"])
+    write_json(segments_path, segments)
     t0 = time.time()
     S.rgbd_slam(cfg)
     if seg["end_seconds"] is None:
@@ -264,18 +300,16 @@ def cmd_run(args):
         raise SystemExit("--checkpoint_every: frames between checkpoints, 0 = off")
     cal = protocol.calibration()
     colors, _ = protocol.dataset_frames(args.dataset)
-    seq = sequence_name(args.dataset)
-    run_dir = os.path.join(work, "splatam", seq)
+    run_dir = run_dir_of(work, args.dataset)
     segments_path = os.path.join(work, "timing_segments.json")
     complete, params_files, _ = checkpoints(run_dir)
     if args.resume:
         if not complete:
             raise SystemExit(f"--resume: no complete checkpoint in {run_dir}")
         resume_idx = complete[-1]
-        with open(segments_path, encoding="utf-8") as f:
-            segments = json.load(f)
+        segments = read_json(segments_path)
         if segments[-1]["end_seconds"] is not None:
-            raise SystemExit(f"{work}: the run already finished; `export` it instead")
+            raise SystemExit(f"{work}: the run already finished; `export` and `package` it instead")
         print(f"resuming from the checkpoint of frame {resume_idx} (frame {resume_idx} is processed again)")
     else:
         if params_files or os.path.isfile(os.path.join(run_dir, "params.npz")) or os.path.isfile(segments_path):
@@ -290,6 +324,7 @@ def cmd_run(args):
     write_json(os.path.join(work, "config_resolved.json"), cfg)
     run_slam(splatam, cfg, segments_path, segments)
     cmd_export(args)
+    cmd_package(args)
 
 
 # ---------------------------------------------------------------- export
@@ -317,6 +352,20 @@ def timing(segments, n_frames):
             "what": what, "sessions": len(segments)}
 
 
+def write_figures(renders_dir, colors, out):
+    """figures/<idx>_render.png and _obs.jpg of protocol.FIGURE_FRAMES, as
+    score.py writes them (for a look at the run before scoring)."""
+    from PIL import Image
+
+    os.makedirs(out, exist_ok=True)
+    for i in protocol.FIGURE_FRAMES:
+        if i >= len(colors):
+            continue
+        image = protocol.load_render(os.path.join(renders_dir, f"{i:06d}.npy"))
+        Image.fromarray(protocol.to_png8(image)).save(os.path.join(out, f"{i:06d}_render.png"))
+        shutil.copy(colors[i], os.path.join(out, f"{i:06d}_obs.jpg"))
+
+
 def cmd_export(args):
     import torch
     import torch.nn.functional as F
@@ -331,8 +380,8 @@ def cmd_export(args):
     cal = protocol.calibration()
     colors, _ = protocol.dataset_frames(args.dataset)
     n = len(colors)
-    seq = sequence_name(args.dataset)
-    run_dir = os.path.join(work, "splatam", seq)
+    scene, variant = scene_variant(args.dataset)
+    run_dir = run_dir_of(work, args.dataset)
     out = os.path.join(work, "export")
     renders_dir = os.path.join(out, "renders")
     os.makedirs(renders_dir, exist_ok=True)
@@ -377,11 +426,12 @@ def cmd_export(args):
             im, _, _ = Renderer(raster_settings=cam)(**rendervar)
             np.save(os.path.join(renders_dir, f"{i:06d}.npy"),
                     im.permute(1, 2, 0).cpu().numpy().astype(np.float16))
+    write_figures(renders_dir, colors, os.path.join(out, "figures"))
 
-    with open(os.path.join(work, "timing_segments.json"), encoding="utf-8") as f:
-        write_json(os.path.join(out, "timing.json"), timing(json.load(f), n))
-    with open(os.path.join(work, "overrides.json"), encoding="utf-8") as f:
-        overrides = json.load(f)
+    segments = read_json(os.path.join(work, "timing_segments.json"))
+    write_json(os.path.join(out, "timing.json"), timing(segments, n))
+    write_json(os.path.join(out, "calibration.json"), cal)
+    overrides = read_json(os.path.join(work, "overrides.json"))
     from importlib.metadata import PackageNotFoundError, version
 
     try:
@@ -393,34 +443,83 @@ def cmd_export(args):
              + (f", checkpoints every {overrides['checkpoint_interval']} frames" if overrides["save_checkpoints"]
                 else "")
              + ". Maps EVERY frame (map_every=1): the rendering-metric frames were mapping targets.")
-    method = {"method": "splatam", "commit": method_commit(splatam), "torch": torch.__version__,
-              "diff_gaussian_rasterization": raster, "overrides": overrides, "notes": notes,
-              "frames": n, "keyframes": len(keyframes), "renders": len(frames)}
+    method = {"method": METHOD, "scene": scene, "variant": variant, "dataset": os.path.abspath(args.dataset),
+              "started_at": segments[0]["started_at"], "commit": method_commit(splatam),
+              "torch": torch.__version__, "diff_gaussian_rasterization": raster,
+              "frames": n, "keyframes": len(keyframes), "renders": len(frames),
+              "gaussians": int(npz["means3D"].shape[0]), "overrides": overrides, "notes": notes}
     write_json(os.path.join(out, "method.json"), method)
     with open(os.path.join(out, "notes.txt"), "w", encoding="utf-8") as f:
         f.write(notes)
-    print(f"{n} poses, {len(keyframes)} keyframes, {len(frames)} renders -> {out}")
-    print("score (MonoGS environment; <export> = this folder once copied there):\n"
-          f"  python baselines/common/score.py --method splatam --dataset {args.dataset} "
-          "--traj <export>/traj_est.tum --keyframes <export>/keyframes.txt --renders <export>/renders "
-          f"--timing <export>/timing.json --out baselines/results/splatam__{seq}/<time> "
-          f"--method_commit {method['commit']} --notes \"$(cat <export>/notes.txt)\" --wandb")
+    print(f"{n} poses, {len(keyframes)} keyframes, {len(frames)} renders, "
+          f"{method['gaussians']} Gaussians -> {out}")
+
+
+# ---------------------------------------------------------------- package
+
+def cmd_package(args):
+    """One zip per run, everything score_zip.py needs and the files to
+    analyse it: export/ at the top level of the zip, run/ with the configs,
+    timing segments, log and (unless --no_map) the final map."""
+    work = os.path.abspath(args.work)
+    out = os.path.join(work, "export")
+    method = read_json(os.path.join(out, "method.json"))
+    timing_ = read_json(os.path.join(out, "timing.json"))
+    name = f"{METHOD}__{method['scene']}_{method['variant']}__{method['started_at']}"
+    zip_path = os.path.join(os.path.dirname(work), name + ".zip")
+    members = []  # (path on disk, path in the zip)
+    for root, _, files in os.walk(out):
+        for f in sorted(files):
+            p = os.path.join(root, f)
+            members.append((p, os.path.relpath(p, out).replace(os.sep, "/")))
+    for f in RUN_FILES + (LOG_NAME,):
+        p = os.path.join(work, f)
+        if os.path.isfile(p):
+            members.append((p, "run/" + f))
+        elif f != LOG_NAME:
+            raise FileNotFoundError(p)
+    params = os.path.join(run_dir_of(work, args.dataset), "params.npz")
+    if not args.no_map:
+        members.append((params, "run/params.npz"))
+    summary = {
+        "method": METHOD, "scene": method["scene"], "variant": method["variant"],
+        "started_at": method["started_at"], "commit": method["commit"],
+        "frames": method["frames"], "keyframes": method["keyframes"], "renders": method["renders"],
+        "gaussians": method["gaussians"], "fps": timing_["frames"] / timing_["seconds"],
+        "seconds": timing_["seconds"], "sessions": timing_["sessions"], "gpu": timing_["gpu"],
+        "map_included": not args.no_map,
+        "score": "python baselines/common/score_zip.py --zip <this zip> --dataset <local dataset folder> --wandb",
+        "files": sorted(arc for _, arc in members) + ["summary.json"],
+    }
+    tmp = zip_path + ".tmp"
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+        for p, arc in members:
+            z.write(p, f"{name}/{arc}")
+        z.writestr(f"{name}/summary.json", json.dumps(summary, indent=2))
+    os.replace(tmp, zip_path)
+    print(f"{len(members) + 1} files, {os.path.getsize(zip_path) / 2**20:.0f} MiB -> {zip_path}")
+    print(json.dumps({k: summary[k] for k in ("frames", "keyframes", "gaussians", "fps", "sessions")}))
+    return zip_path
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("run", "export"):
+    for name in ("run", "export", "package"):
         p = sub.add_parser(name)
-        p.add_argument("--splatam", required=True, help="SplaTAM clone (git, for the commit)")
+        if name != "package":
+            p.add_argument("--splatam", default=VENDORED_SPLATAM,
+                           help="SplaTAM source tree (default: the pinned copy in third_party/; or a git clone)")
         p.add_argument("--dataset", required=True, help="MonoGS dataset folder, e.g. .../office0/lit")
         p.add_argument("--work", required=True, help="output folder of this run")
         if name == "run":
             p.add_argument("--checkpoint_every", type=int, required=True,
                            help="frames between checkpoints (SplaTAM's checkpoint_interval), 0 = off")
             p.add_argument("--resume", action="store_true", help="continue from the newest checkpoint in --work")
+        if name != "export":
+            p.add_argument("--no_map", action="store_true", help="leave the final map (params.npz) out of the zip")
     args = ap.parse_args(argv)
-    {"run": cmd_run, "export": cmd_export}[args.cmd](args)
+    {"run": cmd_run, "export": cmd_export, "package": cmd_package}[args.cmd](args)
 
 
 if __name__ == "__main__":

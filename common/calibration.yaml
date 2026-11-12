@@ -1,0 +1,19 @@
+# Verbatim copy of Dataset.Calibration from MonoGS configs/rgbd/replica/base_config.yaml,
+# for adapters that run without the MonoGS repo (Kaggle). Do not edit by hand:
+# score_zip.py refuses a run whose calibration differs from that file.
+Dataset:
+  Calibration:
+    fx: 300.0
+    fy: 300.0
+    cx: 299.5
+    cy: 169.5
+    k1: 0.0
+    k2: 0.0
+    p1: 0.0
+    p2: 0.0
+    k3: 0.0
+    width: 600
+    height: 340
+    depth_scale: 6553.5
+    distorted: False
+
