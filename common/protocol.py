@@ -164,16 +164,25 @@ def ate(est, gt, frames, plot_dir, label, monocular=False):
 
 # ---------------------------------------------------------------- rendering
 
-def rendering_frames(n_frames, keyframes):
-    """Frame indices eval_rendering scores: every 5th, keyframes excluded."""
+def rendering_frames(n_frames, keyframes, offset=0):
+    """Frame indices eval_rendering scores: every 5th from `offset`, keyframes
+    excluded. offset 0 is MonoGS's grid and the default; a method whose
+    keyframes are that grid itself (LoopSplat maps frames 0, 5, 10, ...) is
+    scored on offset HELDOUT_OFFSET instead (PROTOCOL.md, decided 2026-11-13)."""
+    if not 0 <= offset < RENDER_INTERVAL:
+        raise ValueError(f"offset {offset} not in [0, {RENDER_INTERVAL})")
     kf = set(int(k) for k in keyframes)
-    return [i for i in range(0, n_frames - 1, RENDER_INTERVAL) if i not in kf]
+    return [i for i in range(offset, n_frames - 1, RENDER_INTERVAL) if i not in kf]
 
 
-def required_renders(n_frames, keyframes):
+# Grid offset for methods whose keyframes cover the offset-0 grid (see rendering_frames).
+HELDOUT_OFFSET = 2
+
+
+def required_renders(n_frames, keyframes, offset=0):
     """Every frame an adapter must render: the metric frames and the figure
     frames."""
-    return sorted(set(rendering_frames(n_frames, keyframes)) | set(i for i in FIGURE_FRAMES if i < n_frames))
+    return sorted(set(rendering_frames(n_frames, keyframes, offset)) | set(i for i in FIGURE_FRAMES if i < n_frames))
 
 
 def to_png8(rendering):

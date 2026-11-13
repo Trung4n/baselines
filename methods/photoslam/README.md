@@ -30,7 +30,9 @@ python baselines/common/score_zip.py --zip photoslam__office0_lit__<...>.zip \
 | Thứ | Phiên bản | Lý do |
 |---|---|---|
 | OpenCV + opencv_contrib | 4.10.0, có CUDA, chỉ các module `core, imgproc, imgcodecs, highgui, features2d, calib3d, flann, cudev, cudaarithm, cudafilters, cudaimgproc, cudawarping, cudastereo`, chỉ cho compute capability của GPU đang có | Photo-SLAM gọi `cv::cuda` trên đường chạy RGB-D. Tác giả thử 4.7/4.8; 4.10 là bản đầu có sửa lỗi cho CUDA 12.4+ và GCC 13 |
-| LibTorch (C++, cxx11 ABI) | CUDA 11.x → 2.0.1+cu118 (cấu hình của tác giả); CUDA 12.x → 2.1.2+cu121 | Photo-SLAM chỉ hỗ trợ tới 2.1.2. CUDA 13 trở lên: setup dừng và báo lỗi |
+| LibTorch (C++, cxx11 ABI) | CUDA 11.x → 2.0.1+cu118 (cấu hình của tác giả); CUDA 12.x → 2.1.2+cu121 | Photo-SLAM chỉ hỗ trợ tới 2.1.2 |
+| Bộ CUDA dùng để build | nvcc của hệ thống nếu là 11.x hoặc 12.x. Nếu là 13 trở lên (Kaggle 2026-11: nvcc 13.0), cài thêm CUDA 12 qua apt từ repo của NVIDIA (ưu tiên 12.6, rồi 12.5, 12.8) vào `/usr/local/cuda-12.x` và build OpenCV, Photo-SLAM bằng bộ đó; CUDA 13 của hệ thống giữ nguyên | LibTorch ≤ 2.1.2 không có bản cho CUDA 13. Driver của Kaggle chạy được chương trình CUDA 12 |
+| `LD_LIBRARY_PATH` lúc chạy | `<build>/runtime_ld_library_path` do setup ghi: `lib64` của bộ CUDA đã build, cộng symlink tới riêng `libcuda.so*` của driver NVIDIA nếu bộ đệm của loader không có | Không dùng `LD_LIBRARY_PATH` của notebook: thư viện GL của NVIDIA trong đó làm hỏng GL hệ thống (`methods/orbslam3/README.md`), và `cuda/lib64` của nó là CUDA 13 |
 | Trình biên dịch chủ cho CUDA | g++-12 nếu nvcc 12.0–12.3, g++-11 nếu CUDA 11.x; ngược lại GCC hệ thống | nvcc cũ không nhận GCC 13 |
 
 ## Khác biệt so với mặc định của Photo-SLAM cho Replica
@@ -42,7 +44,7 @@ python baselines/common/score_zip.py --zip photoslam__office0_lit__<...>.zip \
 | Giữ nguyên | Mọi khóa ORB khác (1600 đặc trưng, `Camera.RGB 1` vì ví dụ chuyển ảnh sang RGB, `Stereo.b`, `ThDepth`, `DepthMapFactor 6553.5` vốn đã đúng) và toàn bộ `cfg/gaussian_mapper/RGB-D/Replica/<scene>.yaml` (SH bậc 3, 30100 vòng, ...) |
 | Timestamp = chỉ số frame, không giữ nhịp | Giữ như `replica_rgbd.cpp`. Với ORB-SLAM3 khác ví dụ TUM (30 Hz), vì đây là lựa chọn của chính Photo-SLAM cho Replica |
 | Viewer tắt | Kaggle không có màn hình |
-| Build: `-include cstdint`, chính sách CMake ≥ 3.5, `-rpath-link`, chạy không có `LD_LIBRARY_PATH`, trình biên dịch chủ CUDA cũ hơn khi cần | Chỉ sửa lỗi build với bộ công cụ mới của Kaggle (xem `methods/orbslam3/README.md`); làm trên bản chép |
+| Build: `-include cstdint`, chính sách CMake ≥ 3.5, `-rpath-link`, `LD_LIBRARY_PATH` riêng lúc chạy, CUDA 12 cài bên cạnh khi hệ thống là CUDA 13, trình biên dịch chủ CUDA cũ hơn khi cần | Chỉ sửa lỗi build với bộ công cụ mới của Kaggle (xem `methods/orbslam3/README.md`); làm trên bản chép |
 
 ## Điểm cần nói khi diễn giải
 
@@ -60,7 +62,7 @@ python baselines/common/score_zip.py --zip photoslam__office0_lit__<...>.zip \
   - `score_zip.py` chạy được, và dừng đúng khi thiếu ảnh render của một frame;
   - runner dùng `setup_timeout_min` của `kaggle.json`.
 
-  **Chưa build, chưa chạy trên Kaggle.** Rủi ro lớn nhất: build OpenCV 4.10 với phiên bản CUDA của Kaggle, LibTorch 2.1.2 với nvcc mới hơn 12.1, và phiên bản CUDA có thể là 13 (khi đó setup dừng và báo).
+  **Chưa build xong trên Kaggle.** Lần setup đầu (2026-11-13) dừng vì Kaggle có nvcc 13.0 (GCC 13.3, T4 sm 7.5); setup giờ cài CUDA 12 bên cạnh. Rủi ro còn lại: build OpenCV 4.10 với CUDA 12.x, LibTorch 2.1.2 (cu121) với nvcc 12.x mới hơn, và CMake của LibTorch tìm đủ thư viện trong bộ CUDA 12 vừa cài.
 
 ## Đã chạy
 

@@ -51,6 +51,7 @@ MAPPER_SETTINGS = os.path.join("cfg", "gaussian_mapper", "RGB-D", "Replica", "{s
 DEFAULT_BUILD = os.path.join(tempfile.gettempdir(), "photoslam_build")  # setup_kaggle.sh builds there
 DRIVER = os.path.join("Photo-SLAM", "bin", "photoslam_monogs")
 VOCABULARY = os.path.join("Photo-SLAM", "ORB-SLAM3", "Vocabulary", "ORBvoc.txt")
+RUNTIME_LIBS = "runtime_ld_library_path"  # written by setup_kaggle.sh
 TRACKING_STATES = {-1: "SYSTEM_NOT_READY", 0: "NO_IMAGES_YET", 1: "NOT_INITIALIZED", 2: "OK",
                    3: "RECENTLY_LOST", 4: "LOST", 5: "OK_KLT"}
 RAW_FILES = ("trajectory_main_map_world.txt", "keyframes_main_map.txt", "states.csv", "driver_timing.json",
@@ -100,12 +101,18 @@ def orb_settings(src, scene, work, cal):
     return path, changes
 
 
-def run_driver(cmd):
-    """The driver with its output passed through; without LD_LIBRARY_PATH, as
-    setup_kaggle.sh builds and tests it (the NVIDIA GL libraries of Kaggle,
-    see methods/orbslam3/README.md)."""
+def run_driver(cmd, build):
+    """The driver with its output passed through, with the LD_LIBRARY_PATH
+    setup_kaggle.sh tested it with (<build>/runtime_ld_library_path: the CUDA
+    toolkit it was built with, the NVIDIA CUDA driver libraries; not the
+    notebook's, whose NVIDIA GL libraries break the system ones, see
+    methods/orbslam3/README.md)."""
+    with open(os.path.join(build, RUNTIME_LIBS), encoding="utf-8") as f:
+        libs = f.read().strip()
+    print(f"LD_LIBRARY_PATH={libs}", flush=True)
     print("$ " + " ".join(cmd), flush=True)
     env = {k: v for k, v in os.environ.items() if k != "LD_LIBRARY_PATH"}
+    env["LD_LIBRARY_PATH"] = libs
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
                             env=env)
     lines = []
@@ -125,7 +132,7 @@ def cmd_run(args):
     if os.path.exists(raw) or os.path.exists(os.path.join(work, "export")):
         raise SystemExit(f"{work} already holds a run: use a new --work")
     driver, vocab = os.path.join(build, DRIVER), os.path.join(build, VOCABULARY)
-    for p in (driver, vocab):
+    for p in (driver, vocab, os.path.join(build, RUNTIME_LIBS)):
         if not os.path.isfile(p):
             raise FileNotFoundError(f"{p}: run methods/photoslam/setup_kaggle.sh first (builds into {build})")
     os.makedirs(raw)
@@ -152,7 +159,7 @@ def cmd_run(args):
     print(f"Photo-SLAM {commit} on {args.dataset}: {n} frames", flush=True)
 
     started_at = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    log = run_driver([driver, vocab, orb_path, mapper_path, os.path.abspath(args.dataset), str(n), rule, raw])
+    log = run_driver([driver, vocab, orb_path, mapper_path, os.path.abspath(args.dataset), str(n), rule, raw], build)
     for f in RAW_FILES + ("driver_done",):
         if not os.path.isfile(os.path.join(raw, f)):
             raise RuntimeError(f"photoslam_monogs ended without {f}: see the output above")

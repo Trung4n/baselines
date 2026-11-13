@@ -9,6 +9,7 @@ Chép thẳng mã nguồn vào repo, không dùng submodule, để notebook Kagg
 | `ORB_SLAM3/` | UZ-SLAMLab/ORB_SLAM3 | `4452a3c4` (v1.0, 2022-02-10), kèm vocabulary | `methods/orbslam3/` |
 | `Pangolin/` | stevenlovegrove/Pangolin | `aff6883c` (v0.8, 2022-05-02) | thư viện ORB-SLAM3 bắt buộc link; Ubuntu 24.04 không có gói |
 | `Photo-SLAM/` | HuajianUP/Photo-SLAM | `f8bfb2f0` (2024-06-12), kèm bản ORB-SLAM3 đã sửa của nó và vocabulary | `methods/photoslam/` (OpenCV có CUDA và LibTorch tải lúc setup, không chép vào đây) |
+| `LoopSplat/` | GradientSpaces/LoopSplat | `676e18f9` (2025-02-03), kèm gói `hloc` và 3 extension CUDA ở commit `requirements.txt` ghim (`_deps/`) | `methods/loopsplat/` |
 | `GS_ICP_SLAM/` | Lab-of-AI-and-Robotics/GS_ICP_SLAM | `5f996a87` (2026-06-20), kèm 3 submodule ở commit nó ghim (rasterizer, fast_gicp, simple-knn) | `methods/gsicp/` |
 
 Quy tắc:

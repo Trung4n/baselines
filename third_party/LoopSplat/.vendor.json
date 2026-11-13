@@ -1,0 +1,20 @@
+{
+  "name": "LoopSplat",
+  "url": "https://github.com/GradientSpaces/LoopSplat",
+  "commit": "676e18f950b2de6be39525a613120712b67768bb",
+  "commit_date": "2025-02-03 09:03:40 -0800",
+  "parts": {
+    "thirdparty/Hierarchical-Localization": {"url": "https://github.com/cvg/Hierarchical-Localization", "commit": "41860cf4c69fb3f32fc75a4927fcce3d57f9c0a1", "kept": "the hloc/ Python package, LICENSE, setup.py, requirements.txt, README.md (LoopSplat uses hloc.extractors.netvlad only)"},
+    "_deps/simple-knn": {"url": "https://github.com/VladimirYugay/simple-knn", "commit": "c7e51a06a4cd84c25e769fee29ab391fe5d5ff8d", "why": "LoopSplat requirements.txt pins it (pip git URL)"},
+    "_deps/gaussian_rasterizer": {"url": "https://github.com/VladimirYugay/gaussian_rasterizer", "commit": "9c40173fcc8d9b16778a1a8040295bc2f9ebf129", "why": "LoopSplat requirements.txt pins it"},
+    "_deps/diff-gaussian-rasterization-w-pose": {"url": "https://github.com/rmurai0610/diff-gaussian-rasterization-w-pose", "commit": "43e21bff91cd24986ee3dd52fe0bb06952e50ec7", "glm": "5c46b9c07008ae65cb81ab79cd677ecc1934b903", "why": "LoopSplat requirements.txt pins it"}
+  },
+  "changes": [
+    "removed, not used to build or run SLAM: assets/ (README images, 37 MB); of Hierarchical-Localization everything but the hloc package (notebooks, datasets, docs, its own third_party submodules SuperGlue/d2net/r2d2/deep-image-retrieval, lint configs)",
+    "gaussian_rasterizer: removed the committed build/ directory (compiled objects, 57 MB) and .vscode/ (editor settings)",
+    "both rasterizers: removed third_party/glm/doc and test (not used by the build)",
+    "not vendored: evaluate_3d_reconstruction_lib (LoopSplat's mesh evaluation only, not on the SLAM path)"
+  ],
+  "build_patches": "not applied here: methods/loopsplat/setup_kaggle.sh builds COPIES of the three extensions with '#include <cstdint>' / '#include <cfloat>' added when missing (newer GCC / CUDA)",
+  "check": "every other file equals the commits (git status against the original clones, 2026-11-13)"
+}

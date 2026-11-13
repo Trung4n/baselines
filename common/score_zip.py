@@ -31,7 +31,7 @@ import score  # noqa: E402
 BASELINES = os.path.dirname(COMMON)
 RECORD_FILES = ("summary.json", "method.json", "calibration.json", "timing.json", "notes.txt")
 SKIP_RUN_FILES = ("params.npz", "scene.ply")  # final maps (SplaTAM, GS-ICP): large, stay in runs/
-SKIP_RUN_SUFFIXES = (".ply", ".npz")  # any final map (Photo-SLAM: point_cloud.ply)
+SKIP_RUN_SUFFIXES = (".ply", ".npz", ".tar")  # any final map (Photo-SLAM: point_cloud.ply, LoopSplat: submaps.tar)
 
 
 def sha256(path):
@@ -105,6 +105,12 @@ def main(argv=None):
     if os.path.isfile(os.path.join(run, "keyframes.txt")):
         cmd += ["--keyframes", os.path.join(run, "keyframes.txt")]
     cmd += ["--renders", renders] if os.path.isdir(renders) else ["--no_render"]
+    # Rendering grid (PROTOCOL.md): offset 0 unless the adapter declares the
+    # held-out offset because its keyframes are the 0 grid (LoopSplat).
+    offset = int(method.get("heldout_offset", 0))
+    if offset not in (0, protocol.HELDOUT_OFFSET):
+        raise ValueError(f"method.json heldout_offset {offset}: PROTOCOL.md allows 0 or {protocol.HELDOUT_OFFSET}")
+    cmd += ["--render_offset", str(offset)]
     score.main(cmd)
 
     record = os.path.join(out, "run")

@@ -74,6 +74,9 @@ def main(argv=None):
     ap.add_argument("--timing", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--monocular", action="store_true", help="Sim(3) alignment (camera only)")
+    ap.add_argument("--render_offset", type=int, default=0,
+                    help="first frame of the every-5th rendering grid: 0 (MonoGS, the default), or "
+                         "protocol.HELDOUT_OFFSET for a method whose keyframes are the 0 grid (PROTOCOL.md)")
     ap.add_argument("--method_commit", default="")
     ap.add_argument("--notes", default="")
     w = ap.add_mutually_exclusive_group(required=True)
@@ -81,7 +84,7 @@ def main(argv=None):
     w.add_argument("--no_wandb", action="store_true")
     args = ap.parse_args(argv)
 
-    os.makedirs(args.out, exist_ok=True)
+    # Every check before the first write, so a refused run leaves no --out.
     colors, _ = protocol.dataset_frames(args.dataset)
     n = len(colors)
     gt_list = protocol.gt_poses_c2w(args.dataset)
@@ -89,15 +92,20 @@ def main(argv=None):
         raise ValueError(f"{len(gt_list)} reference poses for {n} frames")
     gt = {i: gt_list[i] for i in range(n)}
     est = protocol.read_tum(args.traj)
-    shutil.copy(args.traj, os.path.join(args.out, "traj_est.tum"))
-    keyframes = []
-    if args.keyframes:
-        keyframes = [int(x) for x in open(args.keyframes).read().split()]
-        shutil.copy(args.keyframes, os.path.join(args.out, "keyframes.txt"))
+    keyframes = [int(x) for x in open(args.keyframes).read().split()] if args.keyframes else []
     timing = json.load(open(args.timing))
     for key in ("frames", "seconds", "gpu", "what"):
         if key not in timing:
             raise KeyError(f"{args.timing}: missing {key!r} (PROTOCOL.md, FPS)")
+    frames = [] if args.no_render else protocol.rendering_frames(n, keyframes, args.render_offset)
+    if not args.no_render and not frames:
+        raise ValueError(f"no rendering frames at offset {args.render_offset}: the keyframes cover the grid "
+                         "(PROTOCOL.md: use --render_offset protocol.HELDOUT_OFFSET)")
+
+    os.makedirs(args.out, exist_ok=True)
+    shutil.copy(args.traj, os.path.join(args.out, "traj_est.tum"))
+    if args.keyframes:
+        shutil.copy(args.keyframes, os.path.join(args.out, "keyframes.txt"))
 
     plot_dir = os.path.join(args.out, "plot")
     missing = [i for i in range(n) if i not in est]
@@ -107,7 +115,6 @@ def main(argv=None):
 
     render = None
     if not args.no_render:
-        frames = protocol.rendering_frames(n, keyframes)
         scorer = protocol.RenderScorer()
         rows, quantized = [], False
         for i in frames:
@@ -125,7 +132,7 @@ def main(argv=None):
             wr = csv.DictWriter(f, fieldnames=["frame", "psnr", "ssim", "lpips"])
             wr.writeheader()
             wr.writerows(rows)
-        render = {**mean, "frames": len(rows), "quantized_8bit": quantized}
+        render = {**mean, "frames": len(rows), "quantized_8bit": quantized, "grid_offset": args.render_offset}
         write_figures(args.renders, colors, os.path.join(args.out, "figures"))
 
     fps = timing["frames"] / timing["seconds"]

@@ -15,8 +15,9 @@
 #   add that file to a Kaggle dataset and attach it as input, and the next
 #   session unpacks it from /kaggle/input instead of building (about an hour).
 # - LibTorch C++ (cxx11 ABI): Photo-SLAM supports up to 2.1.2. CUDA 11.x ->
-#   2.0.1+cu118 (the authors' setup), CUDA 12.x -> 2.1.2+cu121. Other CUDA
-#   majors are refused.
+#   2.0.1+cu118 (the authors' setup), CUDA 12.x -> 2.1.2+cu121. With CUDA 13+
+#   (Kaggle 2026-11: nvcc 13.0) a CUDA 12 toolkit is installed beside it from
+#   NVIDIA's apt repository and used for the whole build.
 # Build-only changes, on copies (third_party/Photo-SLAM stays as its commit):
 # - CXXFLAGS '-include cstdint' (GCC 13), CMAKE_POLICY_VERSION_MINIMUM=3.5
 #   (CMake 4 and the cmake_minimum_required 2.8 of ORB-SLAM3/DBoW2/g2o);
@@ -49,14 +50,56 @@ if (( ${#missing[@]} )); then
 fi
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
 export CXXFLAGS="${CXXFLAGS:-} -include cstdint"
-echo "LD_LIBRARY_PATH was: ${LD_LIBRARY_PATH:-<unset>} (unset for Photo-SLAM)"
+OLD_LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
+echo "LD_LIBRARY_PATH was: ${OLD_LD_LIBRARY_PATH:-<unset>} (unset for Photo-SLAM)"
 unset LD_LIBRARY_PATH
 MULTIARCH_LIB="/usr/lib/$(gcc -print-multiarch)"
 
+nvcc_version() { "$1/bin/nvcc" --version | sed -n 's/.*release \([0-9]*\.[0-9]*\).*/\1/p'; }
+cuda12_complete() {  # what the OpenCV CUDA modules and LibTorch's CMake need from a toolkit
+    [[ -x "$1/bin/nvcc" && -f "$1/include/npp.h" && -f "$1/include/cublas_v2.h" && -e "$1/lib64/libnvToolsExt.so" ]]
+}
+
 # CUDA toolkit, GPU, host compiler, LibTorch
 export CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
+NVCC_VER="$(nvcc_version "$CUDA_HOME")"
+CUDA_MAJOR="${NVCC_VER%%.*}"
+if (( CUDA_MAJOR >= 13 )); then
+    # LibTorch <= 2.1.2 exists for CUDA 11.8 / 12.1 only, so Photo-SLAM, its
+    # CUDA code and OpenCV are built with a CUDA 12 toolkit installed beside
+    # the system one (Kaggle 2026-11: nvcc 13.0), from NVIDIA's apt repository.
+    # The driver runs CUDA 12 programs. The system toolkit is left as it is.
+    echo "nvcc $NVCC_VER at $CUDA_HOME: Photo-SLAM needs CUDA 12 (LibTorch <= 2.1.2), installing it beside"
+    CUDA12_HOME=""
+    for d in $(ls -d /usr/local/cuda-12.* 2>/dev/null | sort -V -r); do
+        cuda12_complete "$d" && { CUDA12_HOME="$d"; break; }
+    done
+    if [[ -z "$CUDA12_HOME" ]]; then
+        export DEBIAN_FRONTEND=noninteractive
+        # 12.6 first: the oldest CUDA 12 of the Ubuntu 24.04 repository with GCC 13 support and libnvToolsExt
+        CUDA12_CANDIDATES=(12-6 12-5 12-8)
+        has_cuda12() { apt-cache show "cuda-nvcc-$1" >/dev/null 2>&1; }
+        if ! has_cuda12 "${CUDA12_CANDIDATES[0]}"; then
+            . /etc/os-release
+            REPO="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu${VERSION_ID//./}/$(uname -m)"
+            echo "=== NVIDIA CUDA apt repository: $REPO"
+            wget -q -O /tmp/cuda-keyring.deb "$REPO/cuda-keyring_1.1-1_all.deb"
+            dpkg -i /tmp/cuda-keyring.deb
+            apt-get update
+        fi
+        V=""
+        for c in "${CUDA12_CANDIDATES[@]}"; do has_cuda12 "$c" && { V="$c"; break; }; done
+        [[ -n "$V" ]] || { echo "no CUDA 12 (${CUDA12_CANDIDATES[*]}) in the apt sources" >&2; exit 1; }
+        echo "=== CUDA ${V/-/.} toolkit (nvcc + development libraries, a few GB)"
+        apt-get install -y --no-install-recommends "cuda-nvcc-$V" "cuda-libraries-dev-$V" "cuda-nvtx-$V" \
+            "cuda-cccl-$V" "cuda-driver-dev-$V"
+        CUDA12_HOME="/usr/local/cuda-${V/-/.}"
+        cuda12_complete "$CUDA12_HOME" || { echo "$CUDA12_HOME is incomplete (nvcc, npp, cublas, nvToolsExt)" >&2; exit 1; }
+    fi
+    export CUDA_HOME="$CUDA12_HOME"
+    NVCC_VER="$(nvcc_version "$CUDA_HOME")"
+fi
 export PATH="$CUDA_HOME/bin:$PATH"
-NVCC_VER="$(nvcc --version | sed -n 's/.*release \([0-9]*\.[0-9]*\).*/\1/p')"
 CUDA_MAJOR="${NVCC_VER%%.*}"; CUDA_MINOR="${NVCC_VER##*.}"
 ARCH="$("$PYTHON" -c "import torch; print('%d.%d' % torch.cuda.get_device_capability(0))")"
 ARCH_NUM="${ARCH/./}"
@@ -166,15 +209,45 @@ target_link_libraries(photoslam_monogs
 EOF
     cmake -S "$P" -B "$P/build" -DCMAKE_BUILD_TYPE=Release -DTorch_DIR="$DEPS/libtorch/share/cmake/Torch" \
         -DOpenCV_DIR="$OpenCV_DIR" -DCMAKE_CUDA_COMPILER="$CUDA_HOME/bin/nvcc" -DCMAKE_CUDA_ARCHITECTURES="$ARCH_NUM" \
+        -DCUDA_TOOLKIT_ROOT_DIR="$CUDA_HOME" -DCUDAToolkit_ROOT="$CUDA_HOME" \
         -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath-link,$MULTIARCH_LIB" -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-rpath-link,$MULTIARCH_LIB" \
         "${CUDA_HOST_ARGS[@]}"
     cmake --build "$P/build" -j "$JOBS" --target photoslam_monogs
     touch "$STAMP"
 fi
 
+# Library path of the driver at run time (adapter.py reads it): the CUDA
+# toolkit it was built with (OpenCV's CUDA modules need its libcudart, NPP,
+# cuBLAS) and, when the loader cache has no libcuda.so.1, links to the NVIDIA
+# driver's CUDA libraries only, not the whole NVIDIA folder (its GL libraries
+# break the system ones, methods/orbslam3/README.md).
+RT_LIBS="$CUDA_HOME/lib64"
+if ! ldconfig -p | grep -q 'libcuda\.so\.1 '; then
+    NVDRV="$BUILD/nvidia_cuda_driver"
+    rm -rf "$NVDRV"; mkdir -p "$NVDRV"
+    IFS=: read -ra dirs <<<"$OLD_LD_LIBRARY_PATH"
+    for d in "${dirs[@]}"; do
+        [[ -n "$d" && -e "$d/libcuda.so.1" ]] || continue
+        for f in "$d"/libcuda.so* "$d"/libnvidia-ptxjitcompiler.so* "$d"/libnvidia-nvvm.so*; do
+            [[ -e "$f" ]] && ln -sf "$f" "$NVDRV/"
+        done
+        echo "libcuda.so.1 from $d"
+        break
+    done
+    [[ -e "$NVDRV/libcuda.so.1" ]] || { echo "libcuda.so.1 not found (loader cache, LD_LIBRARY_PATH)" >&2; exit 1; }
+    RT_LIBS="$RT_LIBS:$NVDRV"
+fi
+echo "$RT_LIBS" > "$BUILD/runtime_ld_library_path"
+echo "driver LD_LIBRARY_PATH: $RT_LIBS"
+
 DRV="$BUILD/Photo-SLAM/bin/photoslam_monogs"
-ldd "$DRV" | grep -E "torch|opencv|ORB_SLAM3|gaussian|not found" | sed 's/^/  ldd: /' || true
-out="$("$DRV" 2>&1 || true)"
+ldd_out="$(LD_LIBRARY_PATH="$RT_LIBS" ldd "$DRV")"
+grep -E "torch|opencv|ORB_SLAM3|gaussian|cudart|npp|not found" <<<"$ldd_out" | sed 's/^/  ldd: /' || true
+if grep -q "not found" <<<"$ldd_out"; then
+    echo "photoslam_monogs: libraries not found (above)" >&2
+    exit 1
+fi
+out="$(LD_LIBRARY_PATH="$RT_LIBS" "$DRV" 2>&1 || true)"
 if grep -q "Usage: photoslam_monogs" <<<"$out"; then
     echo "photoslam_monogs ok: $DRV"
 else

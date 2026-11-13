@@ -44,6 +44,8 @@ KILL_GRACE_S = 60  # after a timeout: SIGTERM to the process group, SIGKILL this
 # PROTOCOL.md, FPS). In the repo, not the notebook: an older notebook copy
 # gets it too. Outside /kaggle/working, so it is not part of the output.
 STAGE_ROOT = os.path.join(tempfile.gettempdir(), "baselines_data")
+SETUP_TAIL_LINES = 40  # log lines shown again when a setup fails
+_SETUP_OK = set()  # methods whose setup() succeeded in this kernel; run() refuses the others
 
 
 def method_dir(method):
@@ -283,8 +285,14 @@ def setup(method, timeout_min, stall_min, progress_s=30):
     code, reason = stream(["bash", script], log, timeout_min * 60, stall_min * 60, progress_s,
                           env=dict(os.environ, PYTHON=sys.executable))
     if code != 0:
+        _SETUP_OK.discard(method)  # a failed rebuild may have left a half-built tree
         why = f"exit code {code}" if reason == "ok" else f"stopped ({reason})"
-        raise RuntimeError(f"setup {method} FAILED: {why}; see the output above (log: {log})")
+        # the cause is usually near the end, and the notebook output above may be long
+        with open(log, encoding="utf-8", errors="replace") as f:
+            tail = f.readlines()[-SETUP_TAIL_LINES:]
+        print(f"--- last {len(tail)} lines of {log} ---\n" + "".join(tail).rstrip() + "\n---", flush=True)
+        raise RuntimeError(f"setup {method} FAILED: {why}; the cause is in the lines just above (log: {log})")
+    _SETUP_OK.add(method)
     print(f"=== setup {method}: ok, {time.time() - t0:.0f} s", flush=True)
 
 
@@ -299,6 +307,10 @@ def run(method, dataset, out, checkpoint_every, timeout_h, stall_min, progress_s
     The adapter reads a local copy of the dataset's frames under stage_root
     (stage_dataset); stage_root=None reads the dataset in place (FPS then
     depends on its disk)."""
+    if method not in _SETUP_OK:
+        # before staging: copying a dataset takes minutes, the adapter would fail anyway
+        raise RuntimeError(f"setup({method!r}) has not succeeded in this kernel: fix the setup error and run "
+                           "the setup cell again (a second setup skips what is already built)")
     if not os.path.isdir(os.path.join(dataset, "results")):
         raise FileNotFoundError(f"{dataset}: no results/ (a MonoGS dataset folder?)")
     source = dataset
