@@ -62,7 +62,7 @@ python baselines/common/score_zip.py --zip photoslam__office0_lit__<...>.zip \
   - `score_zip.py` chạy được, và dừng đúng khi thiếu ảnh render của một frame;
   - runner dùng `setup_timeout_min` của `kaggle.json`.
 
-  **Chưa build xong trên Kaggle.** Lần setup đầu (2026-11-13) dừng vì Kaggle có nvcc 13.0 (GCC 13.3, T4 sm 7.5); setup giờ cài CUDA 12 bên cạnh. Rủi ro còn lại: build OpenCV 4.10 với CUDA 12.x, LibTorch 2.1.2 (cu121) với nvcc 12.x mới hơn, và CMake của LibTorch tìm đủ thư viện trong bộ CUDA 12 vừa cài.
+  **Chưa build xong trên Kaggle.** Lần setup đầu (2026-11-13) dừng vì Kaggle có nvcc 13.0 (GCC 13.3, T4 sm 7.5); setup giờ cài CUDA 12 bên cạnh. Lần thứ hai cài được CUDA 12 nhưng build OpenCV hỏng: cờ `-include cstdint` (dành cho ORB-SLAM3) bị FindCUDA của OpenCV chuyển sang nvcc, nvcc chèn nó hai lần (lỗi "redefinition"); giờ OpenCV build không có cờ này. Rủi ro còn lại: build OpenCV 4.10 với CUDA 12.x, LibTorch 2.1.2 (cu121) với nvcc 12.x mới hơn, và CMake của LibTorch tìm đủ thư viện trong bộ CUDA 12 vừa cài.
 
 ## Đã chạy
 

@@ -49,6 +49,12 @@ if (( ${#missing[@]} )); then
     apt-get install -y --no-install-recommends "${missing[@]}"
 fi
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
+# '-include cstdint' is for ORB-SLAM3 and Photo-SLAM (GCC 13), not OpenCV:
+# OpenCV's FindCUDA passes the C++ flags to nvcc, which applies the forced
+# include to the .cu file and again to its preprocessed output (redefinition
+# errors, Kaggle 2026-11-13). Photo-SLAM compiles CUDA as a CMake language,
+# without the C++ flags.
+OPENCV_CXXFLAGS="${CXXFLAGS:-}"
 export CXXFLAGS="${CXXFLAGS:-} -include cstdint"
 OLD_LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
 echo "LD_LIBRARY_PATH was: ${OLD_LD_LIBRARY_PATH:-<unset>} (unset for Photo-SLAM)"
@@ -155,7 +161,13 @@ else
                     rm -f "$DEPS/$repo.tar.gz"
                 }
             done
-            cmake -S "$DEPS/opencv-$OPENCV_VER" -B "$DEPS/opencv-build" -DCMAKE_BUILD_TYPE=Release \
+            # a build tree configured with the forced include (setup before 2026-11-13) is started again
+            if grep -qs "include cstdint" "$DEPS/opencv-build/CMakeCache.txt"; then
+                echo "removing $DEPS/opencv-build: configured with -include cstdint"
+                rm -rf "$DEPS/opencv-build"
+            fi
+            CXXFLAGS="$OPENCV_CXXFLAGS" cmake -S "$DEPS/opencv-$OPENCV_VER" -B "$DEPS/opencv-build" \
+                -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="$OPENCV_CXXFLAGS" \
                 -DCMAKE_INSTALL_PREFIX="$OCV" -DOPENCV_EXTRA_MODULES_PATH="$DEPS/opencv_contrib-$OPENCV_VER/modules" \
                 -DBUILD_LIST=core,imgproc,imgcodecs,highgui,features2d,calib3d,flann,cudev,cudaarithm,cudafilters,cudaimgproc,cudawarping,cudastereo \
                 -DWITH_CUDA=ON -DCUDA_ARCH_BIN="$ARCH" -DCUDA_ARCH_PTX="" -DCUDA_TOOLKIT_ROOT_DIR="$CUDA_HOME" \
