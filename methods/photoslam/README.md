@@ -44,7 +44,7 @@ python baselines/common/score_zip.py --zip photoslam__office0_lit__<...>.zip \
 | Giữ nguyên | Mọi khóa ORB khác (1600 đặc trưng, `Camera.RGB 1` vì ví dụ chuyển ảnh sang RGB, `Stereo.b`, `ThDepth`, `DepthMapFactor 6553.5` vốn đã đúng) và toàn bộ `cfg/gaussian_mapper/RGB-D/Replica/<scene>.yaml` (SH bậc 3, 30100 vòng, ...) |
 | Timestamp = chỉ số frame, không giữ nhịp | Giữ như `replica_rgbd.cpp`. Với ORB-SLAM3 khác ví dụ TUM (30 Hz), vì đây là lựa chọn của chính Photo-SLAM cho Replica |
 | Viewer tắt | Kaggle không có màn hình |
-| Build: `-include cstdint`, chính sách CMake ≥ 3.5, `-rpath-link`, `LD_LIBRARY_PATH` riêng lúc chạy, CUDA 12 cài bên cạnh khi hệ thống là CUDA 13, trình biên dịch chủ CUDA cũ hơn khi cần | Chỉ sửa lỗi build với bộ công cụ mới của Kaggle (xem `methods/orbslam3/README.md`); làm trên bản chép |
+| Build: `-include cstdint` (C++, không cho OpenCV), `#include <cstdint>`/`<cfloat>` chèn vào file CUDA, chính sách CMake ≥ 3.5, `-rpath-link`, `LD_LIBRARY_PATH` riêng lúc chạy, CUDA 12 cài bên cạnh khi hệ thống là CUDA 13, trình biên dịch chủ CUDA cũ hơn khi cần | Chỉ sửa lỗi build với bộ công cụ mới của Kaggle (xem `methods/orbslam3/README.md`); làm trên bản chép |
 
 ## Điểm cần nói khi diễn giải
 
@@ -62,7 +62,7 @@ python baselines/common/score_zip.py --zip photoslam__office0_lit__<...>.zip \
   - `score_zip.py` chạy được, và dừng đúng khi thiếu ảnh render của một frame;
   - runner dùng `setup_timeout_min` của `kaggle.json`.
 
-  **Chưa build xong trên Kaggle.** Lần setup đầu (2026-11-13) dừng vì Kaggle có nvcc 13.0 (GCC 13.3, T4 sm 7.5); setup giờ cài CUDA 12 bên cạnh. Lần thứ hai cài được CUDA 12 nhưng build OpenCV hỏng: cờ `-include cstdint` (dành cho ORB-SLAM3) bị FindCUDA của OpenCV chuyển sang nvcc, nvcc chèn nó hai lần (lỗi "redefinition"); giờ OpenCV build không có cờ này. Rủi ro còn lại: build OpenCV 4.10 với CUDA 12.x, LibTorch 2.1.2 (cu121) với nvcc 12.x mới hơn, và CMake của LibTorch tìm đủ thư viện trong bộ CUDA 12 vừa cài.
+  **Chưa build xong trên Kaggle.** Lần setup đầu (2026-11-13) dừng vì Kaggle có nvcc 13.0 (GCC 13.3, T4 sm 7.5); setup giờ cài CUDA 12 bên cạnh. Lần thứ hai cài được CUDA 12 nhưng build OpenCV hỏng: cờ `-include cstdint` (dành cho ORB-SLAM3) bị FindCUDA của OpenCV chuyển sang nvcc, nvcc chèn nó hai lần (lỗi "redefinition"); giờ OpenCV build không có cờ này. Lần thứ ba build xong OpenCV (khoảng 0.5 giờ) nhưng rasterizer CUDA của Photo-SLAM thiếu `uint32_t`: CUDA ở đây là ngôn ngữ CMake nên không nhận `CXXFLAGS`; setup giờ chèn `#include <cstdint>` vào các file dùng kiểu số nguyên cố định (rasterizer, `src/*.cu`, `include/*.h`, simple-knn) và `<cfloat>` vào `simple_knn.cu`, trên bản chép, như GS-ICP và LoopSplat. Rủi ro còn lại: build OpenCV 4.10 với CUDA 12.x, LibTorch 2.1.2 (cu121) với nvcc 12.x mới hơn, và CMake của LibTorch tìm đủ thư viện trong bộ CUDA 12 vừa cài.
 
 ## Đã chạy
 

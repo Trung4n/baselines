@@ -211,6 +211,17 @@ else
     echo "=== Photo-SLAM + photoslam_monogs"
     cp "$BASELINES/third_party/Photo-SLAM/CMakeLists.txt" "$P/CMakeLists.txt"
     cp "$HERE/photoslam_monogs.cpp" "$P/examples/photoslam_monogs.cpp"
+    # The CUDA sources get no CXXFLAGS (CUDA is a CMake language here), so the
+    # includes GCC 13 no longer pulls in transitively are added to the copies,
+    # as for GS-ICP and LoopSplat: <cstdint> where fixed-width integers are
+    # used (rasterizer_impl.h, Kaggle 2026-11-13), <cfloat> in simple-knn.
+    while IFS= read -r f; do
+        grep -q "<cstdint>" "$f" || { sed -i '1i #include <cstdint>' "$f"; echo "  + <cstdint>: ${f#$P/}"; }
+    done < <(grep -lE '\bu?int(8|16|32|64)_t\b' "$P"/cuda_rasterizer/*.{h,cu} "$P"/src/*.cu "$P"/include/*.h \
+                 "$P"/third_party/simple-knn/*.{h,cu} 2>/dev/null || true)
+    for f in "$P"/third_party/simple-knn/simple_knn.cu; do
+        grep -q "<cfloat>" "$f" || { sed -i '1i #include <cfloat>' "$f"; echo "  + <cfloat>: ${f#$P/}"; }
+    done
     cat >> "$P/CMakeLists.txt" <<'EOF'
 
 # baselines/methods/photoslam: the adapter's driver (replica_rgbd loop, no viewer, MonoGS dataset I/O)
