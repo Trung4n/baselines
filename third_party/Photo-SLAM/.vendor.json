@@ -1,0 +1,12 @@
+{
+  "name": "Photo-SLAM",
+  "url": "https://github.com/HuajianUP/Photo-SLAM",
+  "commit": "f8bfb2f0809c003ccc3fd577dc43c576fcafa4ac",
+  "commit_date": "2024-06-12 15:53:51 +0800",
+  "changes": [
+    "removed, not used to build or run SLAM: ORB-SLAM3/evaluation/ (EuRoC/TUM ground truth and scripts, 51 MB), ORB-SLAM3/Calibration_Tutorial.pdf",
+    "ORB-SLAM3/.gitignore renamed .gitignore.upstream: its '*' rule ignores every file without an extension, which the baselines repo would then not commit"
+  ],
+  "not_vendored": "OpenCV 4.10.0 + opencv_contrib 4.10.0 (built with CUDA) and LibTorch (<= 2.1.2, the newest Photo-SLAM supports) are downloaded by methods/photoslam/setup_kaggle.sh from their official release URLs, pinned there",
+  "check": "every other file equals the commit (git status against the original clone, 2026-11-13)"
+}

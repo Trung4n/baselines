@@ -40,6 +40,10 @@ BASELINES = os.path.dirname(COMMON)
 METHODS = os.path.join(BASELINES, "methods")
 LOG_NAME = "run.log"  # the adapters pack <work>/run.log into run/ of the zip
 KILL_GRACE_S = 60  # after a timeout: SIGTERM to the process group, SIGKILL this much later
+# Local copy of each dataset's frames, read by every method (stage_dataset;
+# PROTOCOL.md, FPS). In the repo, not the notebook: an older notebook copy
+# gets it too. Outside /kaggle/working, so it is not part of the output.
+STAGE_ROOT = os.path.join(tempfile.gettempdir(), "baselines_data")
 
 
 def method_dir(method):
@@ -146,7 +150,7 @@ def _kill(proc):
             continue
 
 
-def stream(cmd, log, timeout_s, stall_s, progress_s, env=None, append=False):
+def stream(cmd, log, timeout_s, stall_s, progress_s, env=None, append=False, note=None):
     """Runs cmd with its output in the notebook (Screen) and, complete, in the
     log file. Stops it after timeout_s in total, or after stall_s without any
     output. Returns (exit code, or None when stopped; "ok" | "timeout" |
@@ -155,6 +159,8 @@ def stream(cmd, log, timeout_s, stall_s, progress_s, env=None, append=False):
     screen = Screen(progress_s)
     chunks = queue.Queue()
     with open(log, "a" if append else "w", encoding="utf-8") as f:
+        if note:
+            f.write(f"# {note}\n")
         head = "$ " + " ".join(cmd)
         f.write(head + "\n")
         f.flush()
@@ -215,6 +221,52 @@ def stream(cmd, log, timeout_s, stall_s, progress_s, env=None, append=False):
     return code, reason
 
 
+# ---------------------------------------------------------------- local copy
+
+def stage_dataset(dataset, root):
+    """Copies <dataset>/results/ to <root>/<scene>/<variant>/results/ (same
+    scene/variant names, so the run's records name the same dataset) and
+    returns (that folder, seconds, "copied" | "reused"). Only results/ is
+    copied: the frames a sensor gives; traj.txt and the other passes stay out
+    of the run's reach. A complete earlier copy (same file names and sizes)
+    is reused.
+
+    Why (PROTOCOL.md, FPS): reading frames from /kaggle/input costs 0.1 to
+    0.2 s each and varies between sessions; GS-ICP and ORB-SLAM3 read them in
+    sequence, so their FPS measured that disk, not the method. Every method
+    reads the same local copy; the copy is not timed."""
+    scene, variant = scene_variant(dataset)
+    src = os.path.join(dataset, "results")
+    dst_dir = os.path.join(root, scene, variant)
+    dst = os.path.join(dst_dir, "results")
+    files = sorted(os.listdir(src))
+    sizes = {f: os.path.getsize(os.path.join(src, f)) for f in files}
+    done = dst_dir + ".staged.json"  # next to the copy: the adapter's folder holds results/ only
+    if os.path.isfile(done):
+        with open(done, encoding="utf-8") as f:
+            if json.load(f) == {"source": os.path.abspath(dataset), "sizes": sizes}:
+                return dst_dir, 0.0, "reused"
+    need = sum(sizes.values())
+    os.makedirs(root, exist_ok=True)
+    free = shutil.disk_usage(root).free
+    if free < 1.2 * need:
+        raise OSError(f"{root}: {free / 2**30:.1f} GiB free, the copy needs {need / 2**30:.1f} GiB")
+    if os.path.isfile(done):
+        os.remove(done)  # written again only once the copy is complete
+    if os.path.exists(dst_dir):
+        shutil.rmtree(dst_dir)
+    os.makedirs(dst)
+    t0 = time.time()
+    print(f"staging {len(files)} files ({need / 2**20:.0f} MiB) of {dataset} to {dst_dir} (not timed)", flush=True)
+    for j, f in enumerate(files):
+        shutil.copyfile(os.path.join(src, f), os.path.join(dst, f))
+        if (j + 1) % 1000 == 0:
+            print(f"  staged {j + 1}/{len(files)}", flush=True)
+    with open(done, "w", encoding="utf-8") as f:
+        json.dump({"source": os.path.abspath(dataset), "sizes": sizes}, f)
+    return dst_dir, time.time() - t0, "copied"
+
+
 # ---------------------------------------------------------------- notebook API
 
 def setup(method, timeout_min, stall_min, progress_s=30):
@@ -222,6 +274,11 @@ def setup(method, timeout_min, stall_min, progress_s=30):
     interpreter, shown in the notebook; raises if it fails or hangs."""
     script = os.path.join(method_dir(method), "setup_kaggle.sh")
     log = os.path.join(tempfile.gettempdir(), f"setup_{method}.log")
+    need = method_info(method).get("setup_timeout_min")
+    if need is not None and need > timeout_min:
+        # kaggle.json knows the method's build time; the notebook's value may be older
+        print(f"note: {method} declares setup_timeout_min {need} (> {timeout_min}): using {need}", flush=True)
+        timeout_min = need
     t0 = time.time()
     code, reason = stream(["bash", script], log, timeout_min * 60, stall_min * 60, progress_s,
                           env=dict(os.environ, PYTHON=sys.executable))
@@ -231,14 +288,26 @@ def setup(method, timeout_min, stall_min, progress_s=30):
     print(f"=== setup {method}: ok, {time.time() - t0:.0f} s", flush=True)
 
 
-def run(method, dataset, out, checkpoint_every, timeout_h, stall_min, progress_s=30, resume=False, no_map=False):
+def run(method, dataset, out, checkpoint_every, timeout_h, stall_min, progress_s=30, resume=False, no_map=False,
+        stage_root=STAGE_ROOT):
     """adapter.py run on one dataset, output to <out>/<method>__<scene>_<variant>/
     (complete log: run.log there), the zip next to it; output shown in the
     notebook as it comes. Stopped after timeout_h, or after stall_min without
     output. Returns the zip path; None if the run failed, timed out or hung
-    (resume it with resume=True, from its checkpoints)."""
+    (resume it with resume=True, from its checkpoints).
+
+    The adapter reads a local copy of the dataset's frames under stage_root
+    (stage_dataset); stage_root=None reads the dataset in place (FPS then
+    depends on its disk)."""
     if not os.path.isdir(os.path.join(dataset, "results")):
         raise FileNotFoundError(f"{dataset}: no results/ (a MonoGS dataset folder?)")
+    source = dataset
+    note = f"dataset read in place: {source}"
+    if stage_root:
+        dataset, secs, how = stage_dataset(source, stage_root)
+        note = (f"dataset {how} to local disk before the run (not timed, {secs:.0f} s): {source} -> {dataset} "
+                "(results/ only)")
+        print(note, flush=True)
     info = method_info(method)
     if not info["checkpoints"]:
         if resume:
@@ -259,7 +328,7 @@ def run(method, dataset, out, checkpoint_every, timeout_h, stall_min, progress_s
     print(f"=== {method} on {dataset}", flush=True)
     t0 = time.time()
     code, reason = stream(cmd, os.path.join(work, LOG_NAME), timeout_h * 3600, stall_min * 60, progress_s,
-                          append=resume)
+                          append=resume, note=note)
     new = sorted(set(glob.glob(pattern)) - zips_before)
     status = ("OK" if code == 0 else f"FAILED, exit code {code}") if reason == "ok" else f"STOPPED ({reason})"
     print(f"=== {method} on {dataset}: {status}, {(time.time() - t0) / 3600:.2f} h", flush=True)

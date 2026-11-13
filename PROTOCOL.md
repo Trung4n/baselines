@@ -48,6 +48,10 @@ python baselines/common/compare_figures.py --out <png> --column "Đồ án=<dir>
 
 - FPS = số frame / thời gian thực của vòng SLAM (tracking và mapping) trên toàn chuỗi. Giống `Total FPS` của MonoGS: tính từ lúc bắt đầu tới lúc frame cuối được xử lý, **không tính** phần đánh giá cuối và refine.
 - **Thời gian đọc ảnh đầu vào được tính** (quyết định 2026-11-13). MonoGS đọc từng frame bên trong khoảng được đo: `dataset[idx]`, và `FramePrefetcher` đọc trước một frame trên luồng phụ, từ `start.record()` tới `end.record()` trong `slam.py`. Một phương pháp đọc hết ảnh vào bộ nhớ **trước** vòng lặp (GS-ICP) vì vậy phải cộng thời gian đó vào. Để minh bạch, `timing.json` ghi thêm thời gian vòng lặp riêng (`loop_s`, `fps_loop_only`), và bảng kết quả nêu cả hai số. Thời gian khởi tạo một lần (dựng môi trường, nạp model LPIPS) không tính.
+- **Đọc ảnh từ bản chép trên ổ cục bộ** (quyết định 2026-11-13). Đọc từ `/kaggle/input` tốn 0.1–0.2 s mỗi ảnh và thay đổi giữa các phiên. GS-ICP (nạp 2000 ảnh mất 204 s ở phiên này, 451 s ở phiên khác) và ORB-SLAM3 (khoảng 160 ms mỗi frame ngoài tracking) đọc tuần tự, nên FPS của chúng đo tốc độ ổ đĩa chứ không đo thuật toán. MonoGS có luồng đọc trước nên che được phần lớn độ trễ.
+  - **Phương pháp khác:** `common/kaggle_runner.run()` chép `results/` của dataset ra `/tmp/baselines_data/<scene>/<variant>/` trước run, không tính giờ; adapter đọc bản chép đó. Việc chép được ghi ở dòng đầu `run/run.log` trong zip.
+  - **MonoGS:** để so FPS đồng nhất, chép cả thư mục biến thể ra ổ cục bộ trước khi chạy (`cp -r <OFFICE0_LIT> /tmp/data/office0/lit`, MonoGS còn cần `traj.txt` và `calib/`), rồi chạy `slam.py --dataset_path /tmp/data/office0/lit`.
+  - Các run trước ngày 2026-11-13 đọc thẳng từ `/kaggle/input`; FPS của chúng đánh dấu như vậy trong `RESULTS.md`.
 - Ghi vào `timing.json`:
   - `frames`, `seconds`;
   - `gpu`: tên GPU, có dùng một hay hai GPU;

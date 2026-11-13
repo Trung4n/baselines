@@ -40,7 +40,11 @@ def write_figures(renders_dir, colors, out):
     for i in protocol.FIGURE_FRAMES:
         if i >= len(colors):
             continue
-        image = protocol.load_render(os.path.join(renders_dir, f"{i:06d}.npy"))
+        path = os.path.join(renders_dir, f"{i:06d}.npy")
+        if not os.path.isfile(path):  # e.g. a frame without a pose: noted by the adapter, decided at scoring
+            print(f"figures: no render of frame {i}, skipped", flush=True)
+            continue
+        image = protocol.load_render(path)
         Image.fromarray(protocol.to_png8(image)).save(os.path.join(out, f"{i:06d}_render.png"))
         shutil.copy(colors[i], os.path.join(out, f"{i:06d}_obs.jpg"))
 

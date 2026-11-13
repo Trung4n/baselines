@@ -62,4 +62,9 @@ Loop closure và atlas nhiều bản đồ bật theo mặc định. MonoGS khô
 
 ## Đã chạy
 
-(chưa có)
+| Ngày | Biến thể | ATE all (cm) | Frame thiếu | Bản đồ | Keyframe | FPS (riêng tracking) | Kết quả |
+|---|---|---|---|---|---|---|---|
+| 2026-11-12 | office0 / lit | 3.55 | 0 | 1 | 162 | 5.51 (54) | `results/orbslam3__office0_lit/2026-11-12-17-53-07`; 1 loop closure quanh frame 1700 |
+| 2026-11-12 | office0 / even | 1.36 | 0 | 1 | 91 | 5.56 (51) | `results/orbslam3__office0_even/2026-11-12-17-53-29` |
+
+Build xong ở lần thứ tư trên Kaggle (C++17 `mnFullBAIdx`, link OpenGL, bước kiểm driver; xem bảng khác biệt ở trên). Phân tích ở `RESULTS.md`, mục "ORB-SLAM3 RGB-D trên `office0`".

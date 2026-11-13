@@ -31,6 +31,7 @@ import score  # noqa: E402
 BASELINES = os.path.dirname(COMMON)
 RECORD_FILES = ("summary.json", "method.json", "calibration.json", "timing.json", "notes.txt")
 SKIP_RUN_FILES = ("params.npz", "scene.ply")  # final maps (SplaTAM, GS-ICP): large, stay in runs/
+SKIP_RUN_SUFFIXES = (".ply", ".npz")  # any final map (Photo-SLAM: point_cloud.ply)
 
 
 def sha256(path):
@@ -114,7 +115,7 @@ def main(argv=None):
     run_dir = os.path.join(run, "run")
     for root, _, files in os.walk(run_dir):  # keep the zip's sub-folders (e.g. GS-ICP's gsicp_out/hook/)
         for f in sorted(files):
-            if f in SKIP_RUN_FILES:
+            if f in SKIP_RUN_FILES or f.endswith(SKIP_RUN_SUFFIXES):
                 continue
             rel = os.path.relpath(os.path.join(root, f), run_dir)
             os.makedirs(os.path.dirname(os.path.join(record, rel)), exist_ok=True)
