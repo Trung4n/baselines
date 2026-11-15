@@ -1,0 +1,13 @@
+{
+  "name": "SEGS-SLAM",
+  "url": "https://github.com/leaner-forever/SEGS-SLAM",
+  "commit": "2110994a4acb6c1fe3d3e082f21899bc20d36d03",
+  "commit_date": "2025-10-18 21:47:46 +0800",
+  "changes": [
+    "removed, not used to build or run SLAM: ORB-SLAM3/evaluation/ (EuRoC/TUM ground truth and scripts, 51 MB), ORB-SLAM3/Calibration_Tutorial.pdf (as for Photo-SLAM)",
+    "removed: every __pycache__/ folder (Python 3.7 bytecode committed upstream under eval/ and lpipsPyTorch/; the baselines .gitignore ignores them)",
+    "ORB-SLAM3/.gitignore renamed .gitignore.upstream: its '*' rule ignores every file without an extension, which the baselines repo would then not commit"
+  ],
+  "not_vendored": "OpenCV 4.10.0 + opencv_contrib 4.10.0 (built with CUDA), LibTorch (<= 2.1.2) and pytorch_scatter 2.1.2 (its C++ library, TorchScatter) are downloaded by methods/segsslam/setup_kaggle.sh from their official release URLs, pinned there",
+  "check": "every other file equals the commit (git status against the original clone, 2026-11-16)"
+}

@@ -167,6 +167,32 @@ def render_submaps(out_dir, estimated_c2w, frames, renders_dir, cal):
     return keyframes, starts, n_gauss
 
 
+def torch_compat(torch):
+    """API removals between LoopSplat's torch (2.1) and the installed one,
+    patched before LoopSplat is imported; returns what was patched (for
+    overrides.json). Only arguments that change no computation:
+    - ReduceLROnPlateau(verbose=...): removed in newer torch (Kaggle 2026-11:
+      2.11 raises TypeError); LoopSplat passes verbose=False (tracking in
+      gaussian_model.py, registration in gsr/solver.py), which only turned
+      off a log line. verbose=True is refused rather than dropped."""
+    import inspect
+
+    patched = {}
+    cls = torch.optim.lr_scheduler.ReduceLROnPlateau
+    if "verbose" not in inspect.signature(cls.__init__).parameters:
+        init = cls.__init__
+
+        def __init__(self, *a, verbose=False, **k):
+            if verbose:
+                raise ValueError("ReduceLROnPlateau(verbose=True): not supported by this torch")
+            init(self, *a, **k)
+
+        cls.__init__ = __init__
+        patched["torch.ReduceLROnPlateau"] = (f"verbose=False dropped (removed in torch {torch.__version__}; "
+                                              "it only controlled logging)")
+    return patched
+
+
 def cmd_run(args):
     src, work = os.path.abspath(args.loopsplat), os.path.abspath(args.work)
     if args.checkpoint_every != 0 or args.resume:
@@ -193,11 +219,15 @@ def cmd_run(args):
 
     import faiss_shim
     faiss_backend = faiss_shim.install(faiss)
+    compat = torch_compat(torch)
+    for k, v in compat.items():
+        print(f"compat: {k}: {v}", flush=True)
     print(f"LoopSplat {commit} on {args.dataset}: {n} frames; faiss backend: {faiss_backend}", flush=True)
 
     seq_dir = stage(args.dataset, work, n)
     config, overrides = build_config(src, scene, seq_dir, out_dir, cal)
     overrides["faiss"] = faiss_backend
+    overrides.update(compat)
     runzip.write_json(os.path.join(work, "overrides.json"), overrides)
     runzip.write_json(os.path.join(work, "config_resolved.json"), config)
 

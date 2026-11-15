@@ -24,8 +24,8 @@
 # - when nvcc is older than 12.4 (no GCC 13 support), g++-12 (CUDA 12.0-12.3)
 #   or g++-11 (CUDA 11.x) as the CUDA host compiler;
 # - -rpath-link to the system library directory (the NVIDIA GL libraries of
-#   Kaggle, see methods/orbslam3/README.md); the driver runs without
-#   LD_LIBRARY_PATH;
+#   Kaggle, see methods/orbslam3/README.md); the driver runs with only
+#   <build>/runtime_ld_library_path (written at the end) as LD_LIBRARY_PATH;
 # - the driver methods/photoslam/photoslam_monogs.cpp added as one executable
 #   (linked like examples/replica_rgbd, without the viewer); only it and what it
 #   needs are built.

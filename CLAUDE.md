@@ -30,7 +30,7 @@ Nguyên tắc chọn: ưu tiên **3DGS-SLAM và 3DGS** chạy được trên d�
 
 | Phương pháp | Cơ chế | Ghi chú |
 |---|---|---|
-| SEGS-SLAM (ICCV 2025, arXiv 2501.05242) | nhúng ngoại hình sinh từ pose camera (AfME), tracking ORB-SLAM3 | có RGB-D; repo có thể là `leaner-forever/SEGS-SLAM`, chưa xác nhận chính chủ. Ưu tiên cao nhất nhóm B |
+| SEGS-SLAM (ICCV 2025, arXiv 2501.05242) | nhúng ngoại hình sinh từ pose camera (AfME), tracking ORB-SLAM3 | `methods/segsslam/`: code chính chủ `leaner-forever/SEGS-SLAM` (README ghi "Official code for ICCV 2025"), xây trên Photo-SLAM, có RGB-D. Đang làm (2026-11-16) |
 | Taming the Light (arXiv 2511.22968) | tách màu thành albedo nhân hệ số chiếu sáng theo từng ảnh | gần ý tưởng đồ án nhất (nhưng học, không vật lý). Code chưa xác nhận; kiểm có RGB-D không |
 | RoGER-SLAM (arXiv 2510.22600) | kết hợp ảnh, độ sâu, cạnh; tăng cường ảnh khi suy giảm nặng | đánh giá trên Replica; code chưa xác nhận |
 | VarSplat (CVPR 2026, arXiv 2603.09673) | phương sai ngoại hình cho mỗi Gaussian làm trọng số tracking | RGB-D; có project page, repo chưa xác nhận. Tùy chọn |
@@ -133,6 +133,7 @@ Phần chấm (`score.py`, `score_zip.py`, `from_monogs_record.py`) import code 
 - [ ] MonoGS gốc chạy lại bằng code hiện tại (`lit`, `even`, có `--record`), chấm bằng `from_monogs_record.py`
 - [ ] GS-ICP với depth có nhiễu (script xuất dataset nhiễu: chưa viết, làm ở repo đồ án)
 - [ ] LoopSplat
-- [ ] Nhóm B: kiểm code SEGS-SLAM, Taming the Light, RoGER-SLAM, VarSplat; chạy những cái có code và hỗ trợ RGB-D
+- [ ] SEGS-SLAM RGB-D (nhóm B, 2026-11-16): mã chép vào `third_party/SEGS-SLAM`; `segs_monogs.cpp`, `adapter.py`, `setup_kaggle.sh` (thêm PCL, TorchScatter 2.1.2; OpenCV dùng chung cache với Photo-SLAM), `kaggle.json` đã viết, sửa từ bản Photo-SLAM. Phần Python đã kiểm cục bộ; **chưa build, chưa chạy**. Mapper train tiếp tới 30000 vòng sau frame cuối (mặc định của tác giả): so với cột sau refine của đồ án (`methods/segsslam/README.md`).
+- [ ] Nhóm B còn lại: kiểm code Taming the Light, RoGER-SLAM, VarSplat; chạy những cái có code và hỗ trợ RGB-D
 - [ ] Nhóm C: thêm mục giao thức cho phương pháp cần pose cho trước; 3DGS + bilateral grid, SpotlessGS, DarkGS
 - [x] Bảng chính: ORB-SLAM3 rời bảng khi Photo-SLAM có số (2026-11-15; giữ trong `RESULTS.md` làm kết quả phụ)
