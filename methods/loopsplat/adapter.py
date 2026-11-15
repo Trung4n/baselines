@@ -91,6 +91,19 @@ def build_config(src, scene, seq_dir, out_dir, cal):
     finally:
         os.chdir(cwd)
     overrides = {}
+    # Pixel counts sampled when a submap starts (mapper.seed_new_gaussians:
+    # np.random.choice without replacement over the frame's pixels) are set
+    # for LoopSplat's Replica resolution. Kept as the same FRACTION of the
+    # frame at the dataset resolution: scaled by the pixel-count ratio (at
+    # 600x340, 600000 of 1200x680 pixels would exceed the frame; Kaggle
+    # 2026-11-15). Negative values (all pixels) are kept.
+    ratio = (cal["width"] * cal["height"]) / (config["cam"]["W"] * config["cam"]["H"])
+    for key in ("new_submap_points_num", "new_submap_gradient_points_num"):
+        old = config["mapping"][key]
+        if old >= 0:
+            new = int(round(old * ratio))
+            overrides[f"mapping.{key}"] = f"{old} -> {new} (x {ratio:g}, pixel count of the dataset frames)"
+            config["mapping"][key] = new
     for key, value in (("H", cal["height"]), ("W", cal["width"]), ("fx", cal["fx"]), ("fy", cal["fy"]),
                        ("cx", cal["cx"]), ("cy", cal["cy"]), ("depth_scale", cal["depth_scale"])):
         if key not in config["cam"]:
