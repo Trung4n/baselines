@@ -37,7 +37,7 @@ fi
 
 ARCH="$("$PYTHON" -c "import torch; print('%d.%d' % torch.cuda.get_device_capability(0))")"
 STAMP="$BUILD/.built_for_sm$ARCH"
-if [[ -f "$STAMP" ]] && "$PYTHON" -c "import simple_knn._C, gaussian_rasterizer, diff_gaussian_rasterization" 2>/dev/null; then
+if [[ -f "$STAMP" ]] && "$PYTHON" -c "import torch, simple_knn._C, gaussian_rasterizer, diff_gaussian_rasterization" 2>/dev/null; then
     echo "LoopSplat extensions already built for sm $ARCH"
 else
     rm -rf "$BUILD"
@@ -57,5 +57,5 @@ else
     done
     touch "$STAMP"
 fi
-"$PYTHON" -c "import simple_knn._C, gaussian_rasterizer, diff_gaussian_rasterization; print('extensions ok')"
+"$PYTHON" -c "import torch, simple_knn._C, gaussian_rasterizer, diff_gaussian_rasterization; print('extensions ok')"
 "$PYTHON" -c "import json; print('LoopSplat', json.load(open('$SRC/.vendor.json'))['commit'])"

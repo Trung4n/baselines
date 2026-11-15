@@ -66,4 +66,4 @@ python baselines/common/score_zip.py --zip photoslam__office0_lit__<...>.zip \
 
 ## Đã chạy
 
-(chưa có)
+2026-11-15, `office0` `lit` và `even`, mỗi biến thể một run, mỗi run một phiên Kaggle (T4). Build thành công với LibTorch 2.1.2+cu121, OpenCV 4.10 build bằng CUDA 12 cài cạnh CUDA 13 của Kaggle. Kết quả: `lit` ATE 7.93 cm, PSNR 17.44; `even` ATE 1.66 cm, PSNR 35.51; FPS 25.6 / 26.9. Không frame chấm ảnh nào thiếu pose. Mapper chỉ đạt 5883 / 7281 vòng (tối đa của cấu hình 30100), vì nó dừng ngay sau frame cuối. Phân tích ở `RESULTS.md`, mục "Photo-SLAM trên `office0`".

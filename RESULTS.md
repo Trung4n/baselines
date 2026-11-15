@@ -4,15 +4,21 @@ File này lưu số liệu cho chương thực nghiệm của báo cáo. Mỗi l
 
 ## Bảng tổng (điền dần)
 
-ATE tính bằng cm. `all` là ATE trên mọi frame, số chính để so giữa các phương pháp. **FPS của mọi run hiện có (trước 2026-11-13) đo khi đọc ảnh thẳng từ `/kaggle/input`.** Với GS-ICP và ORB-SLAM3, con số đó chủ yếu phản ánh tốc độ ổ đĩa. Từ 2026-11-13, runner đọc từ bản chép trên ổ cục bộ (`PROTOCOL.md`, mục FPS), và các run chạy lại sẽ thay số FPS ở bảng này. `kf` là ATE trên keyframe theo cách MonoGS báo. PSNR, SSIM, LPIPS lấy trên bản đồ cuối, không refine. FPS đo trên Kaggle T4.
+ATE tính bằng cm. `all` là ATE trên mọi frame, số chính để so giữa các phương pháp. **FPS của các run trước 2026-11-13 (SplaTAM, GS-ICP, ORB-SLAM3) đo khi đọc ảnh thẳng từ `/kaggle/input`; Photo-SLAM đọc từ ổ cục bộ.** Với GS-ICP và ORB-SLAM3, con số đó chủ yếu phản ánh tốc độ ổ đĩa. Từ 2026-11-13, runner đọc từ bản chép trên ổ cục bộ (`PROTOCOL.md`, mục FPS), và các run chạy lại sẽ thay số FPS ở bảng này. `kf` là ATE trên keyframe theo cách MonoGS báo. PSNR, SSIM, LPIPS lấy trên bản đồ cuối, không refine. FPS đo trên Kaggle T4.
 
 | Phương pháp | Loại tracking | `office0` `even`: ATE all | `office0` `lit`: ATE all / kf | `lit`: PSNR / SSIM / LPIPS | FPS | Số run |
 |---|---|---|---|---|---|---|
 | **Đồ án** (mô hình chính, lưới 0.5 m, `_parallel_fused`) | quang trắc, mô hình đèn | chưa chạy | 1.45, 1.10 / 1.46, 1.09 | 35.84 / 0.958 / 0.043, 36.28 / 0.963 / 0.041 (trước refine) | 3.18, 3.05 (T4 x2) | 2 |
 | MonoGS gốc (`configs/rgbd/replica/office0.yaml`) | quang trắc | kf 1.13 (D133) | kf 84 (CLAUDE.md, code cũ) | – | 2.28 (`even`) | 1 |
 | SplaTAM | quang trắc + độ sâu | 0.80 | 62.6 / 63.0 | 13.59 / 0.512 / 0.591 (`even`: 38.92 / 0.969 / 0.055) | 0.24 `lit`, 0.20 `even` (T4, 1 GPU) | 1 |
-| ORB-SLAM3 RGB-D | đặc trưng | 1.36 | 3.55 / 3.94 | không có bản đồ | 5.51 `lit`, 5.56 `even` (gồm đọc ảnh; riêng tracking 54, 51; CPU 4 nhân) | 1 |
+| Photo-SLAM | đặc trưng (ORB-SLAM3) + bản đồ Gaussian | 1.66 | 7.93 / 6.09 | 17.44 / 0.696 / 0.401 (`even`: 35.51 / 0.939 / 0.089) | 25.6 `lit`, 26.9 `even` (gồm đọc ảnh từ ổ cục bộ; riêng tracking 29.7, 31.4; T4, 1 GPU, tracking trên CPU) | 1 |
 | GS-ICP SLAM | hình học (G-ICP) | 0.041 | 0.032 / 0.032 | 16.71 / 0.758 / 0.289 (`even`: 44.25 / 0.987 / 0.013) | 5.14 `lit`, 3.13 `even` (tính cả đọc ảnh; riêng vòng tracking 10.8, 10.6; T4, 1 GPU, GICP trên CPU) | 1 |
+
+**Kết quả phụ** (không vào bảng chính; Photo-SLAM thay chỗ, cùng tracking):
+
+| Phương pháp | Loại tracking | `office0` `even`: ATE all | `office0` `lit`: ATE all / kf | FPS | Số run |
+|---|---|---|---|---|---|
+| ORB-SLAM3 RGB-D | đặc trưng | 1.36 | 3.55 / 3.94 (có 1 loop closure) | 5.51 `lit`, 5.56 `even` (gồm đọc ảnh từ `/kaggle/input`; riêng tracking 54, 51; CPU 4 nhân) | 1 |
 
 **Cần chạy lại cho đồng nhất:**
 - MonoGS gốc trên `lit` và `even` bằng code hiện tại, có `--record`, để có ATE all, PSNR và FPS cùng giao thức.
@@ -33,6 +39,8 @@ ATE tính bằng cm. `all` là ATE trên mọi frame, số chính để so giữ
 | 2026-11-12 | GS-ICP `5f996a87` | office0 / even | 0.0413 | 0.0413 | 44.25 | 0.9872 | 0.0133 | 3.13 | T4, 1 GPU | `results/gsicp__office0_even/2026-11-12-14-05-04`; 1.48M Gaussian, 209 keyframe, 8626 vòng mapping; FPS = 2000 / (đọc ảnh 450.7 s + vòng tracking 189.2 s); riêng vòng tracking 10.57; `metrics.json` của run này còn ghi 10.57 (cách tính cũ) |
 | 2026-11-12 | ORB-SLAM3 `4452a3c4` | office0 / lit | 3.548 | 3.937 | – | – | – | 5.51 | CPU 4 nhân | `results/orbslam3__office0_lit/2026-11-12-17-53-07`; 1 bản đồ, 2000/2000 frame OK, 162 keyframe, 1 loop closure (~frame 1700); tracking trung bình 18.4 ms/frame |
 | 2026-11-12 | ORB-SLAM3 `4452a3c4` | office0 / even | 1.365 | 1.275 | – | – | – | 5.56 | CPU 4 nhân | `results/orbslam3__office0_even/2026-11-12-17-53-29`; 1 bản đồ, 2000/2000 frame OK, 91 keyframe, không loop closure; tracking trung bình 19.4 ms/frame |
+| 2026-11-15 | Photo-SLAM `f8bfb2f0` | office0 / lit | 7.932 | 6.094 | 17.44 | 0.6959 | 0.4008 | 25.6 | T4, 1 GPU | `results/photoslam__office0_lit/2026-11-15-14-36-51`; 1 bản đồ, 2000/2000 frame OK, 169 keyframe, **không** loop closure; 140.8k Gaussian, 5883 vòng mapper; 366 frame chấm ảnh; riêng tracking 29.7 FPS; LibTorch 2.1.2+cu121, CUDA 12 cài cạnh CUDA 13 |
+| 2026-11-15 | Photo-SLAM `f8bfb2f0` | office0 / even | 1.662 | 1.473 | 35.51 | 0.9392 | 0.0887 | 26.9 | T4, 1 GPU | `results/photoslam__office0_even/2026-11-15-14-43-30`; 1 bản đồ, 2000/2000 frame OK, 105 keyframe, không loop closure; 54.9k Gaussian, 7281 vòng mapper; 376 frame chấm ảnh; riêng tracking 31.4 FPS |
 
 Trong ngoặc là số sau color refinement. MonoGS log cả hai dòng `mean psnr` trước và sau refine.
 
@@ -45,8 +53,8 @@ Năm frame chung: 100, 500, 825, 1125, 1750 (`PROTOCOL.md`). Ảnh của từng 
 | office0 / lit | (chưa có) | Quan sát, Đồ án, MonoGS gốc, SplaTAM, GS-ICP |
 | office0 / lit, chỉ SplaTAM | `results/figures_splatam_office0_lit.png` | Quan sát, SplaTAM |
 | office0 / even, chỉ SplaTAM | `results/figures_splatam_office0_even.png` | Quan sát, SplaTAM |
-| office0 / lit | `results/figures_office0_lit.png` | Quan sát, SplaTAM, GS-ICP |
-| office0 / even | `results/figures_office0_even.png` | Quan sát, SplaTAM, GS-ICP |
+| office0 / lit | `results/figures_office0_lit.png` | Quan sát, SplaTAM, GS-ICP, Photo-SLAM (2026-11-15) |
+| office0 / even | `results/figures_office0_even.png` | Quan sát, SplaTAM, GS-ICP, Photo-SLAM (2026-11-15) |
 
 ## Ghi chú cho báo cáo
 
@@ -83,4 +91,20 @@ Năm frame chung: 100, 500, 825, 1125, 1750 (`PROTOCOL.md`). Ảnh của từng 
 - **Loop closure đã giúp:** trên `lit`, ORB-SLAM3 phát hiện một vòng lặp quanh frame 1700 và hiệu chỉnh quỹ đạo; trên `even` thì không có. Sai số lớn nhất trên `lit` vẫn là 16 cm (frame 1733, ngay trước khi vòng lặp được đóng). MonoGS và đồ án không có loop closure, nên so ATE thì ORB-SLAM3 đang được lợi.
 - **FPS bị chi phối bởi việc đọc ảnh:** vòng lặp mất 360 s cho 2000 frame (5.5 FPS), nhưng riêng `TrackRGBD` chỉ 37–39 s (51–54 FPS). Phần còn lại khoảng 160 ms/frame là đọc ảnh từ `/kaggle/input` (`cv::imread` trong vòng lặp, như `rgbd_tum`) cộng thời gian chờ để giữ nhịp 30 Hz (ít nhất 28 s). Cùng hiện tượng với GS-ICP: đọc 2000 ảnh mất 204–451 s. MonoGS cũng đọc từ `/kaggle/input`, nhưng có luồng đọc trước một frame nên che được độ trễ này. **FPS của các phương pháp đọc ảnh tuần tự vì vậy phản ánh tốc độ ổ đĩa Kaggle nhiều hơn tốc độ thuật toán.** Bảng cần ghi cả FPS riêng phần tracking. Nếu muốn so FPS chặt chẽ, nên chép dataset ra ổ cục bộ trước khi đo, cho mọi phương pháp kể cả MonoGS; việc này cần thống nhất trước.
 - ATE kf (3.94 cm) cao hơn ATE all (3.55 cm) vì keyframe dồn vào các đoạn khó. Chính vì lý do này mà giao thức chọn ATE all làm số chính.
+
+### Photo-SLAM trên `office0` (2026-11-15, mỗi biến thể một run)
+
+- **Trả lời câu 2, đủ cả hai phía (tracking đặc trưng và bản đồ):** đèn đồng hành làm hại cả hai. ATE trên `lit` là 7.93 cm, so với 1.66 cm trên `even` (kém 4.8 lần). PSNR trên `lit` là 17.44, so với 35.51 trên `even`. Mô hình chính của đồ án trên `lit`: ATE 1.10–1.45 cm (tốt hơn 5–7 lần), PSNR 35.8–36.3 trước refine. Cả hai run giữ 1 bản đồ, 2000/2000 frame OK, không frame chấm ảnh nào thiếu pose.
+- **Vì sao kém ORB-SLAM3 (3.55 cm) dù cùng tracking: chủ yếu do loop closure.** Sai số theo đoạn 200 frame (căn chỉnh SE(3) trên mọi frame):
+
+  | Frame | 0–599 | 600–1599 | 1600–1799 | 1800–1999 |
+  |---|---|---|---|---|
+  | Photo-SLAM `lit` (cm) | 5.2–7.5 | 3.5–5.6 | 9.2 | 17.6 |
+  | ORB-SLAM3 `lit` (cm) | 3.5–5.7 | 2.3–3.4 | 4.2 | 1.7 |
+
+  Đến frame 1600, Photo-SLAM chỉ kém ORB-SLAM3 khoảng 1.2–1.7 lần. Khác biệt có thể do cấu hình Replica riêng của Photo-SLAM (1600 đặc trưng thay vì 1000, timestamp = chỉ số frame) và do tính ngẫu nhiên. Sau đó ORB-SLAM3 đóng được vòng lặp quanh frame 1700 và kéo đoạn cuối về 1.7 cm. Photo-SLAM không đóng được, nên sai số tăng tới 24.5 cm ở frame 1996; đoạn cuối chỉ có 3 keyframe, so với 13 của ORB-SLAM3. Vậy với tracking ORB trên `lit`, ATE nằm trong khoảng 3.5–8 cm tùy loop closure có xảy ra hay không: **run thứ hai rất cần** để biết khoảng này. Trên `even` không run nào có loop closure, và hai hệ ngang nhau (1.66 so với 1.36 cm).
+- **Keyframe dày lên ở chỗ khó, như ORB-SLAM3:** 169 keyframe trên `lit` so với 105 trên `even`. Đoạn 200–599 (bảng trắng) có 53 keyframe, so với 27 trên `even`.
+- **Bản đồ: ánh sáng bị nung vào màu.** Photo-SLAM có SH bậc 3, nhưng SH chỉ mô tả màu thay đổi theo hướng nhìn. Ánh sáng của đèn đồng hành thay đổi theo vị trí camera và khoảng cách tới bề mặt, nên SH không biểu diễn được. Ánh sáng nung vào bản đồ chỉ khớp ảnh khi góc nhìn gần một keyframe đã thấy cùng chỗ. Frame 500 là trường hợp đó: render khá giống ảnh quan sát, kể cả đĩa sáng trên bảng trắng. Ở frame 825 và 1125, vùng được chiếu trong render loang ra ngoài nón và nhòe, vì nhiều keyframe chiếu vào sàn từ các vị trí khác nhau. Ở frame 1750, ảnh vừa nhòe vừa lệch, vì pose sai 9–17 cm ở đoạn này (`results/figures_office0_lit.png`). PSNR theo đoạn thấp nhất ở 800–999 (13.0, chỉ 5 keyframe) và 1800–1999 (11.7, pose sai nhất). Mức 17.4 dB ngang GS-ICP trên `lit` (16.7). Ở GS-ICP pose gần như đúng, nên mức PSNR thấp ở đó chủ yếu đến từ việc thiếu mô hình chiếu sáng; ở Photo-SLAM thì lỗi pose cộng thêm vào.
+- **Bản đồ `even` thua SplaTAM và GS-ICP** (35.5 so với 38.9 và 44.3), vì mapper được train ít: 5883 vòng (`lit`) và 7281 vòng (`even`) trên tối đa 30100 của cấu hình. Mapper chạy song song với tracking và dừng ngay sau frame cuối (chỉ train thêm 2–3 s). Tracking chạy nhanh, không giữ nhịp (timestamp = chỉ số frame, như ví dụ `replica_rgbd` của Photo-SLAM), nên cả chuỗi chỉ mất 78 s. Đây là thiết kế thời gian thực của Photo-SLAM. Trên GPU nhanh hơn T4, mapper được nhiều vòng hơn. PSNR theo đoạn trên `even` cũng giảm ở 800–999 và 1800–1999, hai đoạn ít keyframe.
+- **FPS: 25.6 (`lit`) và 26.9 (`even`), gồm đọc ảnh** từ bản chép trên ổ cục bộ. Đây là các run đầu tiên đo theo cách mới (`PROTOCOL.md`, mục FPS). Riêng tracking đạt 29.7 và 31.4 FPS (CPU 4 nhân). So với mô hình chính của đồ án (3.05–3.18 trên T4 x2), Photo-SLAM nhanh hơn khoảng 8 lần, nhưng bản đồ của nó được train ít hơn nhiều.
 

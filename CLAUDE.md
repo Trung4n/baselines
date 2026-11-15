@@ -23,7 +23,7 @@ Nguyên tắc chọn: ưu tiên **3DGS-SLAM và 3DGS** chạy được trên d�
 | (repo đồ án) | MonoGS gốc | 1 | cần chạy lại bằng code hiện tại, có `--record` |
 | `methods/splatam/` | SplaTAM (CVPR 2024), quang trắc kèm độ sâu | 1 | ✅ `lit`/`even`, 1 run mỗi biến thể |
 | `methods/gsicp/` | GS-ICP SLAM (ECCV 2024), tracking G-ICP hình học | 2 | ✅ `lit`/`even`, 1 run. **Cần thêm điều kiện độ sâu có nhiễu** (dưới đây) |
-| `methods/photoslam/` | Photo-SLAM (CVPR 2024), tracking ORB-SLAM3 + bản đồ Gaussian | 2 | đang làm. **Thay ORB-SLAM3 trong bảng chính**: cùng tracking, có thêm ảnh |
+| `methods/photoslam/` | Photo-SLAM (CVPR 2024), tracking ORB-SLAM3 + bản đồ Gaussian | 2 | ✅ `lit`/`even`, 1 run. **Đã thay ORB-SLAM3 trong bảng chính**: cùng tracking, có thêm ảnh |
 | `methods/loopsplat/` | LoopSplat (3DV 2025), có đóng vòng | 1, và "đóng vòng có cứu được trôi không" | chưa làm |
 
 **B. 3DGS-SLAM có cơ chế chống thay đổi ánh sáng hoặc phơi sáng** (đối thủ trực tiếp, câu 3). Trước hết kiểm code có công bố không và có chạy RGB-D không; không có code thì chỉ trích dẫn.
@@ -127,7 +127,7 @@ Phần chấm (`score.py`, `score_zip.py`, `from_monogs_record.py`) import code 
 - [x] Notebook chung `run_baseline.ipynb` và `common/kaggle_runner.py` (2026-11-13). Đã thử với một phương pháp giả: run xong ra zip, run lỗi, run quá giờ, chạy tiếp thì log ghi nối, `collect` giữ thư mục của run khác.
 - [x] SplaTAM `office0` `lit` và `even`, mỗi biến thể một run (2026-11-12). Đã chấm, kết quả và phân tích ở `RESULTS.md`: `lit` ATE 62.6 cm, `even` 0.80 cm. Hai run chạy ở hai phiên Kaggle riêng, nên FPS dùng được. Chạy song song nhiều phiên riêng là cách hợp lệ để tiết kiệm thời gian. Còn mở: run thứ hai cho mỗi biến thể.
 - [x] ORB-SLAM3 RGB-D `office0` `lit` và `even`, mỗi biến thể một run (2026-11-12): ATE 3.55 / 1.36 cm, 1 bản đồ, không mất frame; FPS bị chi phối bởi việc đọc ảnh từ `/kaggle/input` (riêng tracking hơn 50 FPS). Phân tích ở `RESULTS.md`. Còn mở: run thứ hai.
-- [ ] Photo-SLAM RGB-D (người dùng thêm, 2026-11-13): mã chép vào `third_party/Photo-SLAM`; `photoslam_monogs.cpp`, `adapter.py`, `setup_kaggle.sh` (OpenCV 4.10 có CUDA, build và lưu cache; LibTorch ≤ 2.1.2), `kaggle.json` đã viết. Phần Python đã kiểm cục bộ; **chưa build, chưa chạy**. Còn mở: cách chấm khi một frame chấm ảnh không có pose (`methods/photoslam/README.md`).
+- [x] Photo-SLAM RGB-D `office0` `lit` và `even`, mỗi biến thể một run (2026-11-15): ATE 7.93 / 1.66 cm, PSNR 17.44 / 35.51, FPS 25.6 / 26.9 (đọc từ ổ cục bộ). 1 bản đồ, không mất frame, không loop closure; ATE `lit` cao hơn ORB-SLAM3 (3.55) chủ yếu vì ORB-SLAM3 đóng được vòng lặp ở frame ~1700. Build trên Kaggle cần CUDA 12 cài cạnh CUDA 13 (`methods/photoslam/README.md`). Phân tích ở `RESULTS.md`. Còn mở: run thứ hai (nhất là `lit`, để biết loop closure có xảy ra không); cách chấm frame không có pose vẫn chưa cần quyết.
 - [ ] LoopSplat (người dùng thêm, 2026-11-13): mã chép vào `third_party/LoopSplat` (kèm `hloc` và 3 extension trong `_deps/`); `adapter.py`, `faiss_shim.py`, `setup_kaggle.sh`, `kaggle.json` đã viết; phần không cần build đã kiểm cục bộ; **chưa chạy**. LoopSplat mapping mọi frame chia hết cho 5, nên tập chấm ảnh thường rỗng. Người dùng quyết (2026-11-13) chấm trên **tập dịch lưới** (frame 2, 7, 12, …): `method.json` khai báo `heldout_offset`, `score_zip.py` chuyển thành `score.py --render_offset`, quy tắc ở `PROTOCOL.md`; đã thử bằng zip giả.
 - [x] GS-ICP SLAM `office0` `lit` và `even`, mỗi biến thể một run (2026-11-12): ATE 0.032 / 0.041 cm (depth không nhiễu), PSNR `lit` 16.7 so với `even` 44.3 (ánh sáng nung vào bản đồ). Phân tích ở `RESULTS.md`. Còn mở: run thứ hai; thí nghiệm depth có nhiễu. Đóng gói zip dùng `common/runzip.py`, phần chung cho các adapter mới (SplaTAM còn bản riêng, cùng bố cục).
 - [ ] MonoGS gốc chạy lại bằng code hiện tại (`lit`, `even`, có `--record`), chấm bằng `from_monogs_record.py`
@@ -135,4 +135,4 @@ Phần chấm (`score.py`, `score_zip.py`, `from_monogs_record.py`) import code 
 - [ ] LoopSplat
 - [ ] Nhóm B: kiểm code SEGS-SLAM, Taming the Light, RoGER-SLAM, VarSplat; chạy những cái có code và hỗ trợ RGB-D
 - [ ] Nhóm C: thêm mục giao thức cho phương pháp cần pose cho trước; 3DGS + bilateral grid, SpotlessGS, DarkGS
-- [ ] Bảng chính: ORB-SLAM3 rời bảng khi Photo-SLAM có số (giữ trong `RESULTS.md` làm kết quả phụ)
+- [x] Bảng chính: ORB-SLAM3 rời bảng khi Photo-SLAM có số (2026-11-15; giữ trong `RESULTS.md` làm kết quả phụ)
