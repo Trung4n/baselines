@@ -211,6 +211,17 @@ def cmd_run(args):
     # LoopSplat (torch 2.1) torch.load()s its own submap checkpoints; torch >= 2.6
     # defaults to weights_only=True. These are files this run writes itself.
     os.environ.setdefault("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", "1")
+    # One GPU, as LoopSplat runs (its mapping uses GPU 0 only). On a 2-GPU
+    # machine faiss.index_cpu_to_all_gpus (gsr/overlap.py, loop closure)
+    # returns an IndexReplicas wrapper instead of a GPU index, and
+    # faiss.contrib.torch_utils refuses CUDA tensors on it ("GPU tensor on CPU
+    # index not allowed": Kaggle T4 x2, first loop closure, 2026-11-15). Set
+    # before torch and faiss are imported.
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if visible is None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = visible = "0"
+    elif len([d for d in visible.split(",") if d.strip()]) != 1:
+        raise SystemExit(f"CUDA_VISIBLE_DEVICES={visible!r}: LoopSplat must see exactly one GPU (gsr/overlap.py)")
     for p in (src, os.path.join(src, "thirdparty", "Hierarchical-Localization")):
         if p not in sys.path:
             sys.path.insert(0, p)
@@ -227,6 +238,8 @@ def cmd_run(args):
     seq_dir = stage(args.dataset, work, n)
     config, overrides = build_config(src, scene, seq_dir, out_dir, cal)
     overrides["faiss"] = faiss_backend
+    overrides["gpus"] = (f"CUDA_VISIBLE_DEVICES={visible}: one GPU (faiss.index_cpu_to_all_gpus in gsr/overlap.py "
+                         "needs a single-GPU index)")
     overrides.update(compat)
     runzip.write_json(os.path.join(work, "overrides.json"), overrides)
     runzip.write_json(os.path.join(work, "config_resolved.json"), config)
