@@ -432,11 +432,69 @@ if ! ldconfig -p | grep -q 'libcuda\.so\.1 '; then
     [[ -e "$NVDRV/libcuda.so.1" ]] || { echo "libcuda.so.1 not found (loader cache, LD_LIBRARY_PATH)" >&2; exit 1; }
     RT_LIBS="$RT_LIBS:$NVDRV"
 fi
+# NVRTC builtins of LibTorch. LibTorch compiles some CUDA kernels at run time
+# with its bundled NVRTC (lib/libnvrtc-<hash>.so.12; e.g. the float prod
+# reduction, at SEGS-SLAM's first training step). That NVRTC dlopen()s
+# libnvrtc-builtins.so.<ver> by its original name, but LibTorch bundles it
+# renamed (lib/libnvrtc-builtins-<hash>.so.12.1), so it is not found
+# ("nvrtc: error: failed to open libnvrtc-builtins.so.12.1", driver aborted,
+# Kaggle 2026-11-16). The CUDA 12 toolkit beside has the builtins of its own
+# version only (they must match NVRTC's). A link under the original name, in a
+# folder on the driver's LD_LIBRARY_PATH.
+NVRTC_DIR="$BUILD/nvrtc_builtins"
+rm -rf "$NVRTC_DIR"; mkdir -p "$NVRTC_DIR"
+builtins=("$DEPS"/libtorch/lib/libnvrtc-builtins-*.so.*)
+[[ ${#builtins[@]} == 1 && -f "${builtins[0]}" ]] \
+    || { echo "expected one libnvrtc-builtins-<hash>.so.<ver> in $DEPS/libtorch/lib: ${builtins[*]}" >&2; exit 1; }
+ln -s "${builtins[0]}" "$NVRTC_DIR/libnvrtc-builtins.so.${builtins[0]##*.so.}"
+ls -l "$NVRTC_DIR" | tail -n +2 | sed 's/^/  nvrtc: /'
+RT_LIBS="$RT_LIBS:$NVRTC_DIR"
 if [[ -f "$BUILD/prefer_system_libs" ]]; then  # written by pcl_probe (above)
     RT_LIBS="$RT_LIBS:$(cat "$BUILD/prefer_system_libs")"
 fi
 echo "$RT_LIBS" > "$BUILD/runtime_ld_library_path"
 echo "driver LD_LIBRARY_PATH: $RT_LIBS"
+
+# LibTorch probe, with the driver's LD_LIBRARY_PATH: CUDA tensors and the
+# run-time compiled prod reduction (NVRTC + builtins above), before a run.
+TP="$BUILD/torch_probe"
+if [[ ! -x "$TP/build/torch_probe" ]]; then
+    rm -rf "$TP"; mkdir -p "$TP"
+    cat > "$TP/CMakeLists.txt" <<'EOF'
+cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
+project(torch_probe LANGUAGES C CXX CUDA)
+set(CMAKE_CXX_STANDARD 17)
+find_package(Torch REQUIRED)
+add_executable(torch_probe torch_probe.cpp)
+target_link_libraries(torch_probe "${TORCH_LIBRARIES}")
+EOF
+    cat > "$TP/torch_probe.cpp" <<'EOF'
+#include <torch/torch.h>
+#include <cmath>
+#include <cstdio>
+int main() {
+    torch::Tensor x = torch::full({4096}, 1.0001f, torch::TensorOptions().device(torch::kCUDA));
+    float p = x.prod().item<float>();             // reduction compiled at run time by NVRTC
+    float s = (x * 2.0f).sum().item<float>();
+    // as SEGS-SLAM's scaling regularizer (gaussian_mapper.cpp: scaling.prod(1).mean())
+    float r = torch::full({1000, 3}, 2.0f, x.options()).prod(1).mean().item<float>();
+    if (std::fabs(r - 8.0f) > 1e-4f) { std::printf("torch_probe: prod(1).mean() = %f, expected 8\n", r); return 1; }
+    float want = std::pow(1.0001f, 4096.0f);
+    std::printf("torch_probe ok: prod %.5f (expected %.5f), sum %.1f, %s\n", p, want, s,
+                torch::cuda::is_available() ? "CUDA" : "no CUDA");
+    return std::fabs(p - want) < 1e-3f * want ? 0 : 1;
+}
+EOF
+    echo "=== LibTorch probe"
+    TORCH_CUDA_ARCH_LIST="$ARCH" cmake -S "$TP" -B "$TP/build" -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_PREFIX_PATH="$DEPS/libtorch" -DTorch_DIR="$DEPS/libtorch/share/cmake/Torch" \
+        -DCMAKE_CUDA_COMPILER="$CUDA_HOME/bin/nvcc" -DCMAKE_CUDA_ARCHITECTURES="$ARCH_NUM" \
+        -DCUDA_TOOLKIT_ROOT_DIR="$CUDA_HOME" -DCUDAToolkit_ROOT="$CUDA_HOME" \
+        -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath-link,$MULTIARCH_LIB" "${CUDA_HOST_ARGS[@]}"
+    cmake --build "$TP/build" -j "$JOBS"
+fi
+LD_LIBRARY_PATH="$RT_LIBS" "$TP/build/torch_probe" \
+    || { echo "torch_probe fails with the driver's LD_LIBRARY_PATH ($RT_LIBS)" >&2; exit 1; }
 
 DRV="$BUILD/SEGS-SLAM/bin/segs_monogs"
 ldd_out="$(LD_LIBRARY_PATH="$RT_LIBS" ldd "$DRV")"
