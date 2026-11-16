@@ -8,7 +8,9 @@
 # Photo-SLAM, same OpenCV modules, same LibTorch limit, same driver structure);
 # the OpenCV CUDA build has the same cache name, so a cache made in a Photo-SLAM
 # session and attached as a Kaggle dataset is used here too. What SEGS-SLAM adds:
-# - PCL (apt libpcl-dev) and OpenMP (GCC's);
+# - PCL (apt libpcl-dev) and OpenMP (GCC's); MPI (apt mpi-default-dev), found
+#   before PCL on the copy of CMakeLists.txt, because Ubuntu's VTK (loaded by
+#   PCL's config) links MPI::MPI_C;
 # - TorchScatter: the C++ library of pytorch_scatter 2.1.2 (the version SEGS-SLAM
 #   names), built with CUDA against the LibTorch below and installed to
 #   /usr/local as SEGS-SLAM's docker/Dockerfile does. Its CMakeLists links
@@ -58,7 +60,7 @@ TORCHSCATTER_VER=2.1.2
 
 PKGS=(build-essential cmake pkg-config wget unzip libeigen3-dev libboost-serialization-dev libssl-dev
       libjsoncpp-dev libglfw3-dev libglm-dev libgl1-mesa-dev libopengl-dev libjpeg-dev libpng-dev libtiff-dev
-      libpcl-dev)
+      libpcl-dev mpi-default-dev)
 missing=()
 for p in "${PKGS[@]}"; do dpkg -s "$p" >/dev/null 2>&1 || missing+=("$p"); done
 if (( ${#missing[@]} )); then
@@ -265,6 +267,14 @@ else
     [[ "$(grep -c '^set(Torch_DIR ' "$P/CMakeLists.txt")" == 1 ]] \
         || { echo "$P/CMakeLists.txt: expected one 'set(Torch_DIR ...)'" >&2; exit 1; }
     sed -i "s|^set(Torch_DIR .*|set(Torch_DIR $DEPS/libtorch/share/cmake/Torch)  # baselines: was the authors' path|" \
+        "$P/CMakeLists.txt"
+    # PCL's config loads Ubuntu's VTK 9 (PCL visualization, which SEGS-SLAM
+    # includes), whose VTK::mpi target links MPI::MPI_C; that target exists
+    # only once FindMPI has run ("target was not found", generate step fails,
+    # Kaggle 2026-11-16). MPI is found first, from mpi-default-dev (apt above).
+    [[ "$(grep -c '^find_package(PCL REQUIRED)' "$P/CMakeLists.txt")" == 1 ]] \
+        || { echo "$P/CMakeLists.txt: expected one 'find_package(PCL REQUIRED)'" >&2; exit 1; }
+    sed -i 's|^find_package(PCL REQUIRED)|find_package(MPI REQUIRED COMPONENTS C)  # baselines: VTK::mpi (via PCL) links MPI::MPI_C\nfind_package(PCL REQUIRED)|' \
         "$P/CMakeLists.txt"
     # The CUDA sources get no CXXFLAGS (CUDA is a CMake language here), so the
     # includes GCC 13 no longer pulls in transitively are added to the copies,

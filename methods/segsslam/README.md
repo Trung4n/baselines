@@ -33,7 +33,7 @@ python baselines/common/score_zip.py --zip segsslam__office0_lit__<...>.zip \
 | LibTorch (C++, cxx11 ABI) | CUDA 12.x → 2.1.2+cu121; CUDA 11.x → 2.0.1+cu118 (cấu hình của tác giả) | SEGS-SLAM thừa hưởng giới hạn ≤ 2.1.2 của Photo-SLAM |
 | Bộ CUDA dùng để build | nvcc hệ thống nếu 11.x/12.x; nếu 13 trở lên (Kaggle 2026-11: 13.0), cài thêm CUDA 12 qua apt của NVIDIA vào `/usr/local/cuda-12.x` | Như Photo-SLAM |
 | TorchScatter | pytorch_scatter 2.1.2 (bản tác giả ghi), thư viện C++, `WITH_CUDA=ON`, cài vào `/usr/local` như `docker/Dockerfile` của tác giả | SEGS-SLAM gọi `scatter_max` trên tensor CUDA. CMakeLists của nó link cứng `/usr/local/lib/libtorchscatter.so` và tìm header trong đường mặc định |
-| PCL | `libpcl-dev` của Ubuntu | `gaussian_model.h`, `gaussian_mapper.h` include PCL |
+| PCL | `libpcl-dev` của Ubuntu, cộng `mpi-default-dev` | `gaussian_model.h`, `gaussian_mapper.h` include PCL, cả `pcl/visualization` (kéo theo VTK 9). Gói VTK của Ubuntu có target `VTK::mpi` link tới `MPI::MPI_C`, target chỉ có khi đã tìm MPI. Thiếu nó thì bước generate của CMake hỏng (Kaggle 2026-11-16). Setup cài MPI và chèn `find_package(MPI REQUIRED COMPONENTS C)` trước `find_package(PCL REQUIRED)` trên bản chép CMakeLists |
 
 ## Khác biệt so với mặc định của SEGS-SLAM cho Replica
 
@@ -59,7 +59,7 @@ python baselines/common/score_zip.py --zip segsslam__office0_lit__<...>.zip \
 - Đã kiểm cục bộ (không build C++, 2026-11-16): settings ORB (giá trị mới, hệ số méo bỏ, 7200 đặc trưng giữ; cảnh không có cấu hình thì báo lỗi), file mapper tồn tại, export đầu ra giả của driver, `.tar` bản đồ lấy đúng lần lưu cuối (có `mlp/`), đóng zip, `score_zip.py` chấm hết (PSNR 40.17 dB với nhiễu σ = 0.01), runner đọc `kaggle.json`.
 - API ORB-SLAM3 và mapper mà driver dùng đã đối chiếu với mã SEGS-SLAM: `TrackRGBD` chỉ thêm một tham số tùy chọn; `getAtlas`, `getTracker`, `mlRelativeFramePoses`, `renderFromPose`, `pose_`, `poseSaved` đều public.
 
-  **Chưa build, chưa chạy trên Kaggle.** Rủi ro: build TorchScatter 2.1.2 với LibTorch 2.1.2 và CUDA 12; `find_package(PCL)` trên Ubuntu 24.04; các sửa đổi ORB-SLAM3 riêng của SEGS với GCC 13; thời gian train thêm 30000 vòng trên T4 (ước lượng vài chục phút, chưa đo).
+  **Build trên Kaggle (2026-11-16), lần 1:** CUDA 12, OpenCV, TorchScatter (cài vào `/usr/local`, CMake tìm thấy), ORB-SLAM3 bản SEGS đều build xong; CMake của SEGS-SLAM hỏng ở `find_package(PCL)` vì VTK cần `MPI::MPI_C` (đã sửa, xem bảng phụ thuộc). CMake còn cảnh báo `libtbb.so.12` trong `/usr/local/lib` (của ảnh Kaggle) có thể che bản hệ thống khi chạy, vì `/usr/local/lib` vào rpath cùng TorchScatter; bước `ldd` cuối setup sẽ cho biết. **Chưa chạy.** Rủi ro còn lại: build TorchScatter 2.1.2 với LibTorch 2.1.2 và CUDA 12; `find_package(PCL)` trên Ubuntu 24.04; các sửa đổi ORB-SLAM3 riêng của SEGS với GCC 13; thời gian train thêm 30000 vòng trên T4 (ước lượng vài chục phút, chưa đo).
 
 ## Đã chạy
 
