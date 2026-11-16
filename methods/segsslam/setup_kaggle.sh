@@ -143,7 +143,12 @@ int main() {
 }
 EOF
     echo "=== PCL probe (apt packages of SEGS-SLAM's CMakeLists)"
-    cmake -S "$d" -B "$d/build" -DCMAKE_BUILD_TYPE=Release
+    # same linker flags as the SEGS-SLAM build below: without -rpath-link the
+    # linker resolves libOpenGL's libGLdispatch.so.0 to the NVIDIA driver's
+    # older one ("undefined reference to `_glapi_tls_Current'", Kaggle
+    # 2026-11-16, first probe; as ORB-SLAM3 on 2026-11-12)
+    cmake -S "$d" -B "$d/build" -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath-link,$MULTIARCH_LIB" -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-rpath-link,$MULTIARCH_LIB"
     cmake --build "$d/build" -j "$JOBS"
     ldd "$d/build/pcl_probe" | grep -E "pcl_visualization|vtk.*Core|tbb|not found" | head -6 | sed 's/^/  probe ldd: /' || true
     rm -f "$BUILD/prefer_system_libs"
