@@ -54,10 +54,13 @@ Người dùng chọn chấm trên **tập dịch lưới** (`PROTOCOL.md`, mụ
 
 - Đã kiểm cục bộ: `faiss_shim` khớp tìm vét cạn bằng numpy trên GPU (khoảng cách, chỉ số, cách đệm khi ít điểm hơn k, `reset`), config dựng đúng (thay đổi như bảng trên, cảnh không có config thì báo lỗi), dàn dữ liệu, tập dịch lưới.
 
-  **Trên Kaggle** (tới 2026-11-16): 3 extension CUDA, faiss, NetVLAD, tracking, mapping, mở submap, phát hiện vòng, đăng ký `gs_reg` và tối ưu pose graph đã chạy (run `even` tới frame 701). Chưa chạy: phần sau pose graph (hiệu chỉnh submap, cập nhật pose), các lần đóng vòng sau, phần xuất (`render_submaps`, lưu submap cuối, đóng zip).
+  **Trên Kaggle** (tới 2026-11-16): 3 extension CUDA, faiss, NetVLAD, tracking, mapping, mở submap, phát hiện vòng, đăng ký `gs_reg` và tối ưu pose graph đã chạy (run `even` tới frame 701). Sau bản sửa, cả hai run `office0` chạy hết (2026-11-16): `lit` 1 lần tối ưu pose graph, `even` 4 lần, rồi lưu submap cuối, render và đóng zip. Kết quả ở `RESULTS.md`.
 
   Rà soát 2026-11-16, sau lỗi evo, toàn bộ phần chưa chạy (`gaussian_slam.py` từ đóng vòng tới hết `run()`, `lc.py`, `Evaluator` để đối chiếu cách render, và adapter). Kết quả: hai lỗi trên đã sửa. Ngoài ra, ở cấu hình Replica, `lc.final` là `False`, nên lần đóng vòng cuối (vốn đọc cả submap cuối chưa lưu) không chạy. evo chỉ được dùng trong `analyse_pgo`. Các checkpoint `torch.load` lại đều nằm trên đường đã chạy, hoặc có `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD`. Phép biến đổi submap chạy trên CPU, cùng thiết bị.
 
 ## Đã chạy
 
-(chưa có)
+| Ngày | Biến thể | ATE all (cm) | PSNR / SSIM / LPIPS (tập dịch lưới) | FPS | Submap | Tối ưu pose graph | Thư mục |
+|---|---|---|---|---|---|---|---|
+| 2026-11-16 | office0 / lit | 105.02 | 20.71 / 0.869 / 0.144 | 0.53 | 40 | 1 (frame 1102) | `results/loopsplat__office0_lit/2026-11-16-07-47-36` |
+| 2026-11-16 | office0 / even | 0.72 | 45.09 / 0.987 / 0.010 | 0.50 | 28 | 4 | `results/loopsplat__office0_even/2026-11-16-08-55-23` |

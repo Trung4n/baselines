@@ -69,4 +69,9 @@ python baselines/common/score_zip.py --zip segsslam__office0_lit__<...>.zip \
 
 ## Đã chạy
 
-(chưa có)
+| Ngày | Biến thể | ATE all (cm) | PSNR / SSIM / LPIPS | FPS (riêng tracking) | Keyframe | Loop closure | Thư mục |
+|---|---|---|---|---|---|---|---|
+| 2026-11-16 | office0 / lit | 3.06 | 21.57 / 0.815 / 0.220 | 25.2 (28.8) | 158 | 1 (frame 1100–1200) | `results/segsslam__office0_lit/2026-11-16-09-58-39` |
+| 2026-11-16 | office0 / even | 2.78 | 38.68 / 0.964 / 0.041 | 24.0 (27.1) | 100 | không | `results/segsslam__office0_even/2026-11-16-10-19-28` |
+
+Hai run này dùng bản setup có sửa NVRTC (`LD_LIBRARY_PATH` của driver trong log có `nvrtc_builtins`). Setup dừng nếu bước dò PCL hay LibTorch hỏng, nên cả hai bước dò đã qua. Phân tích ở `RESULTS.md`.

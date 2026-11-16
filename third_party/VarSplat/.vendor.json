@@ -1,0 +1,20 @@
+{
+  "name": "VarSplat",
+  "url": "https://github.com/anhthuan1999/varsplat",
+  "commit": "4a21a0aaade40b7c42d47181108e49a8a0e695f2",
+  "commit_date": "2026-06-14 10:16:28 -0700",
+  "parts": {
+    "thirdparty/Hierarchical-Localization": {"url": "https://github.com/cvg/Hierarchical-Localization", "commit": "c13273bd0ecc2917a35910fd843712a1c6243193", "kept": "the hloc/ Python package, LICENSE, setup.py, requirements.txt, README.md (VarSplat, like LoopSplat, uses hloc.extractors.netvlad only)"},
+    "thirdparty/simple-knn": {"url": "https://github.com/anhthuan1999/simple-knn", "commit": "9b72c4110eb6326b8c81d0321ef172600774b22a", "why": "VarSplat submodule (requirements.txt installs thirdparty/simple-knn)"},
+    "thirdparty/gaussian_rasterizer_var": {"url": "https://github.com/anhthuan1999/gaussian_rasterizer_var", "commit": "b7f9982db6d8d7e80c953670181b9d2e721ea8f2", "glm": "committed in that repo (third_party/glm is a plain folder there)", "why": "VarSplat submodule: tracking/mapping rasterizer with the per-splat colour variance (python package gaussian_rasterizer)"},
+    "thirdparty/diff-gaussian-rasterization-w-pose-var": {"url": "https://github.com/anhthuan1999/diff-gaussian-rasterization-w-pose-var", "commit": "0a828ff840a2cd60a807b94430277591586d717a", "glm": "5c46b9c07008ae65cb81ab79cd677ecc1934b903 (its submodule; copied from third_party/LoopSplat/_deps/diff-gaussian-rasterization-w-pose/third_party/glm, same commit)", "why": "VarSplat submodule: registration rasterizer with pose gradients and variance (python package diff_gaussian_rasterization)"}
+  },
+  "changes": [
+    "exported with git archive (no .git); removed, not used to build or run SLAM: assets/ (README images); of Hierarchical-Localization everything but the hloc package (notebooks, datasets, docs, its own third_party submodules)",
+    "both rasterizers: removed committed build outputs (_C.cpython-310-x86_64-linux-gnu.so, __pycache__/) and .vscode/ (editor settings); third_party/glm/doc and test removed (not used by the build)",
+    "simple-knn: removed the committed simple_knn.egg-info/ (build metadata)",
+    "not vendored: evaluate_3d_reconstruction_lib (mesh evaluation only, not on the SLAM path)"
+  ],
+  "build_patches": "not applied here: methods/varsplat/setup_kaggle.sh builds COPIES of the three extensions with '#include <cstdint>' (rasterizers) / '#include <cfloat>' (simple-knn) added when missing (newer GCC / CUDA)",
+  "check": "src, configs, run_slam.py and the rest equal git archive of the commit; submodules from codeload tarballs of the pinned commits (2026-11-16)"
+}
