@@ -69,6 +69,97 @@ if (( ${#missing[@]} )); then
     apt-get install -y --no-install-recommends "${missing[@]}"
 fi
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
+
+# PCL probe: the find_package calls of SEGS-SLAM's CMakeLists that come from
+# apt packages (PCL with Ubuntu's VTK, MPI, OpenMP, Eigen, jsoncpp, OpenGL, glm,
+# glfw), in the same order and with the same project languages as the patched
+# copy below, plus a program built from the PCL headers SEGS-SLAM includes and
+# run. Done before the long steps (CUDA 12, OpenCV, LibTorch, TorchScatter),
+# so a configuration error of these packages shows in minutes, not after
+# them (Kaggle 2026-11-16: two VTK/MPI errors, each found after 30 min).
+pcl_probe() {
+    local d="$BUILD/pcl_probe"
+    rm -rf "$d"; mkdir -p "$d"
+    cat > "$d/CMakeLists.txt" <<'EOF'
+cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
+project(segs_pcl_probe LANGUAGES C CXX)
+set(CMAKE_CXX_STANDARD 17)
+find_package(MPI REQUIRED COMPONENTS C)
+find_package(PCL REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(jsoncpp REQUIRED)
+find_package(OpenGL REQUIRED)
+find_package(glm REQUIRED)
+find_package(glfw3 REQUIRED)
+find_package(OpenMP REQUIRED)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+include_directories(${PCL_INCLUDE_DIRS})
+add_executable(pcl_probe pcl_probe.cpp)
+target_link_libraries(pcl_probe ${PCL_LIBRARIES} jsoncpp_lib Eigen3::Eigen glm::glm glfw OpenGL::GL ${OpenMP_CXX_FLAGS})
+message(STATUS "probe: PCL ${PCL_VERSION}, VTK ${VTK_VERSION}, MPI ${MPI_C_VERSION}, OpenMP ${OpenMP_CXX_VERSION}")
+EOF
+    cat > "$d/pcl_probe.cpp" <<'EOF'
+#include <omp.h>
+#include <cstdio>
+#include <vector>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/types.h>
+#include <pcl/common/common.h>
+#include <pcl/common/transforms.h>
+#include <pcl/filters/passthrough.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/kdtree/kdtree_flann.h>
+#include <pcl/octree/octree.h>
+#include <pcl/octree/octree_pointcloud.h>
+#include <pcl/octree/octree_search.h>
+#include <pcl/visualization/cloud_viewer.h>
+// A reference to a pcl_visualization symbol, so the library and Ubuntu's VTK
+// (and what VTK loads, e.g. TBB, which Kaggle also has in /usr/local/lib)
+// are loaded when the probe starts, as for SEGS-SLAM.
+void (pcl::visualization::PCLVisualizer::* volatile g_spin)(int, bool) =
+    &pcl::visualization::PCLVisualizer::spinOnce;
+int main() {
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    for (int i = 0; i < 1000; ++i) cloud->push_back(pcl::PointXYZ(0.001f * i, 0.002f * i, 0.003f * i));
+    pcl::PointCloud<pcl::PointXYZ> down;
+    pcl::VoxelGrid<pcl::PointXYZ> vg;
+    vg.setInputCloud(cloud);
+    vg.setLeafSize(0.1f, 0.1f, 0.1f);
+    vg.filter(down);
+    pcl::KdTreeFLANN<pcl::PointXYZ> kd;
+    kd.setInputCloud(cloud);
+    std::vector<int> idx(1);
+    std::vector<float> d2(1);
+    kd.nearestKSearch(cloud->points[10], 1, idx, d2);
+    pcl::octree::OctreePointCloudSearch<pcl::PointXYZ> oc(0.05);
+    oc.setInputCloud(cloud);
+    oc.addPointsFromInputCloud();
+    if (g_spin == nullptr) return 2;
+    std::printf("pcl_probe ok: %zu -> %zu points, nearest %d, %d OpenMP threads\n",
+                cloud->size(), down.size(), idx[0], omp_get_max_threads());
+    return idx[0] == 10 ? 0 : 1;
+}
+EOF
+    echo "=== PCL probe (apt packages of SEGS-SLAM's CMakeLists)"
+    cmake -S "$d" -B "$d/build" -DCMAKE_BUILD_TYPE=Release
+    cmake --build "$d/build" -j "$JOBS"
+    ldd "$d/build/pcl_probe" | grep -E "pcl_visualization|vtk.*Core|tbb|not found" | head -6 | sed 's/^/  probe ldd: /' || true
+    rm -f "$BUILD/prefer_system_libs"
+    if ! "$d/build/pcl_probe"; then
+        # Kaggle has its own libtbb.so.12 in /usr/local/lib, ahead of the
+        # system one that Ubuntu's VTK was built with. If that (or another
+        # /usr/local/lib duplicate) breaks loading, the system directory is
+        # put first in the driver's LD_LIBRARY_PATH (runtime_ld_library_path).
+        echo "pcl_probe fails with the default library search; trying with $MULTIARCH_LIB first"
+        LD_LIBRARY_PATH="$MULTIARCH_LIB" "$d/build/pcl_probe" \
+            || { echo "pcl_probe fails, also with $MULTIARCH_LIB first (above)" >&2; exit 1; }
+        echo "$MULTIARCH_LIB" > "$BUILD/prefer_system_libs"
+        echo "pcl_probe: runs with $MULTIARCH_LIB first; the driver will too"
+    fi
+}
+
 # '-include cstdint' is for ORB-SLAM3 and SEGS-SLAM (GCC 13), not OpenCV:
 # OpenCV's FindCUDA passes the C++ flags to nvcc, which applies the forced
 # include to the .cu file and again to its preprocessed output (redefinition
@@ -80,6 +171,9 @@ OLD_LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
 echo "LD_LIBRARY_PATH was: ${OLD_LD_LIBRARY_PATH:-<unset>} (unset for SEGS-SLAM)"
 unset LD_LIBRARY_PATH
 MULTIARCH_LIB="/usr/lib/$(gcc -print-multiarch)"
+if [[ ! -f "$BUILD/.built" ]]; then  # after LD_LIBRARY_PATH is unset, as for the build
+    pcl_probe
+fi
 
 nvcc_version() { "$1/bin/nvcc" --version | sed -n 's/.*release \([0-9]*\.[0-9]*\).*/\1/p'; }
 cuda12_complete() {  # what the OpenCV CUDA modules and LibTorch's CMake need from a toolkit
@@ -272,6 +366,14 @@ else
     # includes), whose VTK::mpi target links MPI::MPI_C; that target exists
     # only once FindMPI has run ("target was not found", generate step fails,
     # Kaggle 2026-11-16). MPI is found first, from mpi-default-dev (apt above).
+    # FindMPI's C component needs the C language, which the project() of
+    # SEGS-SLAM does not enable (LANGUAGES CXX CUDA: "language C is not
+    # enabled", Kaggle 2026-11-16, second attempt): C is added. The same
+    # find_package calls are tried by pcl_probe at the start of this script.
+    [[ "$(grep -c '^project(photo-slam LANGUAGES CXX CUDA)' "$P/CMakeLists.txt")" == 1 ]] \
+        || { echo "$P/CMakeLists.txt: expected one 'project(photo-slam LANGUAGES CXX CUDA)'" >&2; exit 1; }
+    sed -i 's|^project(photo-slam LANGUAGES CXX CUDA)|project(photo-slam LANGUAGES C CXX CUDA)  # baselines: C for FindMPI (VTK via PCL)|' \
+        "$P/CMakeLists.txt"
     [[ "$(grep -c '^find_package(PCL REQUIRED)' "$P/CMakeLists.txt")" == 1 ]] \
         || { echo "$P/CMakeLists.txt: expected one 'find_package(PCL REQUIRED)'" >&2; exit 1; }
     sed -i 's|^find_package(PCL REQUIRED)|find_package(MPI REQUIRED COMPONENTS C)  # baselines: VTK::mpi (via PCL) links MPI::MPI_C\nfind_package(PCL REQUIRED)|' \
@@ -324,6 +426,9 @@ if ! ldconfig -p | grep -q 'libcuda\.so\.1 '; then
     done
     [[ -e "$NVDRV/libcuda.so.1" ]] || { echo "libcuda.so.1 not found (loader cache, LD_LIBRARY_PATH)" >&2; exit 1; }
     RT_LIBS="$RT_LIBS:$NVDRV"
+fi
+if [[ -f "$BUILD/prefer_system_libs" ]]; then  # written by pcl_probe (above)
+    RT_LIBS="$RT_LIBS:$(cat "$BUILD/prefer_system_libs")"
 fi
 echo "$RT_LIBS" > "$BUILD/runtime_ld_library_path"
 echo "driver LD_LIBRARY_PATH: $RT_LIBS"

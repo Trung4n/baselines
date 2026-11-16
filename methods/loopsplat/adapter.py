@@ -19,7 +19,10 @@ Evaluator is not run (scoring is score.py's). What differs, all recorded in
   it; with identities no reference pose reaches the run, and frame 1 starts
   at frame 0's pose), output_path, scene_name; use_wandb off;
 - faiss: the GPU build when installed; else faiss_shim (exact torch GPU
-  search, same neighbours).
+  search, same neighbours);
+- loopsplat_patches: Loop_closure.analyse_pgo (reference-pose evaluation
+  only) skipped; the last submap, which LoopSplat never writes, saved after
+  the run.
 Exported: estimated_c2w (every frame; frame 0 = identity), keyframes = the
 mapping frames of all submaps, renders of the final submaps (after loop
 closure corrections, before LoopSplat's offline global refinement) at the
@@ -193,6 +196,61 @@ def torch_compat(torch):
     return patched
 
 
+def loopsplat_patches(slam):
+    """Patches on LoopSplat that change no estimate; returns what was patched
+    (for overrides.json) and a function that saves the last submap.
+    - Loop_closure.analyse_pgo is skipped. It only evaluates against the
+      reference poses (ATE before/after the pose graph, edge-error plots in
+      <output>/pgo/), after the corrections are computed, on deep copies of
+      the cameras. Here the reference is the identity traj.txt, so it is
+      meaningless, and it cannot run: newer evo has no
+      trajectory.align_trajectory (Kaggle 2026-11-16, first loop closure, frame
+      701), and with evo 1.11 (LoopSplat's pin) Umeyama alignment to identical
+      reference poses raises "Degenerate covariance rank" (checked locally).
+    - The last submap: GaussianSLAM.run() saves a submap only when the next one
+      starts, so the one open at the last frame is never written (its
+      Evaluator renders only saved submaps). Its model is caught at its last
+      Mapper.map call (frame n-1 is always a mapping frame) and saved after
+      the run with LoopSplat's own save_current_submap, so its frames are
+      rendered with their own submap."""
+    from src.entities.lc import Loop_closure
+
+    skipped = []
+
+    def analyse_pgo(self, odometry_edges, loop_edges, pose_graph):
+        skipped.append(self.pgo_count)
+        print(f"loop closure: pose graph {self.pgo_count} optimized ({len(loop_edges)} loop edges); "
+              "analyse_pgo skipped (reference-pose evaluation only)", flush=True)
+
+    Loop_closure.analyse_pgo = analyse_pgo
+    last = {}
+    mapper_map = slam.mapper.map
+
+    def map_and_keep(frame_id, estimate_c2w, gaussian_model, *a, **k):
+        last["frame"], last["model"] = frame_id, gaussian_model
+        return mapper_map(frame_id, estimate_c2w, gaussian_model, *a, **k)
+
+    slam.mapper.map = map_and_keep
+
+    def save_last_submap(n):
+        if last.get("frame") != n - 1 or (n - 1) not in slam.keyframes_info:
+            raise RuntimeError(f"last mapping call at frame {last.get('frame')}, expected {n - 1}")
+        path = slam.output_path / "submaps" / f"{str(slam.submap_id).zfill(6)}.ckpt"
+        if path.exists():
+            raise RuntimeError(f"{path} already exists: the last submap was saved by LoopSplat")
+        slam.save_current_submap(last["model"])
+        print(f"export: saved the last submap {slam.submap_id} ({len(slam.keyframes_info)} keyframes, "
+              f"{last['model'].get_size()} Gaussians)", flush=True)
+
+    patched = {
+        "loop_closure.analyse_pgo": ("skipped: evaluation against reference poses only (identity here), after the "
+                                     "corrections; evo API removed / degenerate alignment"),
+        "export.last_submap": ("saved after the run with save_current_submap (LoopSplat saves a submap only when "
+                               "the next one starts, so the last one was never written)"),
+    }
+    return patched, skipped, save_last_submap
+
+
 def cmd_run(args):
     src, work = os.path.abspath(args.loopsplat), os.path.abspath(args.work)
     if args.checkpoint_every != 0 or args.resume:
@@ -251,13 +309,17 @@ def cmd_run(args):
     t_init0 = time.time()
     slam = GaussianSLAM(config)  # dataset index, NetVLAD weights (downloaded once), output folders
     init_s = time.time() - t_init0
+    patched, pgo_skipped, save_last_submap = loopsplat_patches(slam)
+    overrides.update(patched)
+    runzip.write_json(os.path.join(work, "overrides.json"), overrides)
     started_at = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     torch.cuda.synchronize()
     t0 = time.time()
     slam.run()
     torch.cuda.synchronize()
     loop_s = time.time() - t0
-    print(f"SLAM done in {loop_s:.0f} s, exporting", flush=True)
+    print(f"SLAM done in {loop_s:.0f} s, {len(pgo_skipped)} pose graph optimizations; exporting", flush=True)
+    save_last_submap(n)
 
     out = os.path.join(work, "export")
     renders_dir = os.path.join(out, "renders")
@@ -293,6 +355,7 @@ def cmd_run(args):
         "method": METHOD, "scene": scene, "variant": variant, "dataset": os.path.abspath(args.dataset),
         "started_at": started_at, "commit": commit, "torch": torch.__version__, "faiss": faiss_backend,
         "frames": n, "keyframes": len(keyframes), "submaps": len(starts), "submap_starts": starts,
+        "pose_graph_optimizations": len(pgo_skipped),
         "renders": len(glob.glob(os.path.join(renders_dir, "*.npy"))), "gaussians": n_gauss,
         "rendering_frames_protocol": n_protocol, "rendering_frames_offset": n_offset,
         "heldout_offset": protocol.HELDOUT_OFFSET, "overrides": overrides, "notes": notes})
