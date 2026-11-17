@@ -50,4 +50,9 @@ Gốc: `run_slam.py` với `configs/Replica/<scene>.yaml` (kế thừa `replica.
 
 ## Đã chạy
 
-(chưa có)
+| Ngày | Biến thể | ATE all (cm) | PSNR / SSIM / LPIPS (tập dịch lưới) | FPS | Submap | Tối ưu pose graph | Bộ nhớ GPU đỉnh | Thư mục |
+|---|---|---|---|---|---|---|---|---|
+| 2026-11-17 | office0 / lit | 99.32 | 20.89 / 0.872 / 0.142 | 0.35 | 39 | 2 (frame 1095, 1175) | 1.41 GB | `results/varsplat__office0_lit/2026-11-16-15-37-38` |
+| 2026-11-17 | office0 / even | 0.85 | 45.03 / 0.987 / 0.010 | 0.35 | 28 | 4 | 1.57 GB | `results/varsplat__office0_even/2026-11-16-17-18-32` |
+
+Gần như trùng LoopSplat (105.0 / 0.72 cm), gãy ở frame 255 trên `lit`. Với τ_track = 100, 98% Gaussian có trọng số tracking trong [0.975, 1.065], tức tracking gần như không trọng số. Phân tích ở `RESULTS.md`. Run trên Kaggle chạy hết từ lần đầu: setup, bước dò, cả hai run.
