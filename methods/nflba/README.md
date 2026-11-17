@@ -64,4 +64,9 @@ NFL-BA không có cấu hình Replica, nên gốc là **cấu hình Replica RGB-
 
 ## Đã chạy
 
-(chưa có)
+| Ngày | Biến thể | ATE all (cm) | PSNR / SSIM / LPIPS | FPS | Keyframe | Thư mục |
+|---|---|---|---|---|---|---|
+| 2026-11-17 | office0 / lit | 109.19 | 12.91 / 0.529 / 0.548 | 0.29 | 389 | `results/nflba__office0_lit/2026-11-17-08-16-48` |
+| 2026-11-17 | office0 / even | 6.29 | 22.24 / 0.803 / 0.338 | 0.46 | 391 | `results/nflba__office0_even/2026-11-17-10-17-07` |
+
+Cả hai run chạy hết trên Kaggle ngay lần đầu (setup, bước dò, vòng SLAM, xuất). Cảnh báo `Producer process has been terminated before all shared CUDA tensors released` ở cuối log xuất hiện khi dừng backend, **sau** khi đã render và lưu bản đồ: vô hại, đúng lý do phần xuất làm trước lệnh dừng. Kết quả kém (gãy ở frame 82–90 trên `lit`, 6.3 cm trên `even`); **chưa có run đối chứng tắt `nfl`** để tách mô hình đèn khỏi các khác biệt khác. Phân tích ở `RESULTS.md`.

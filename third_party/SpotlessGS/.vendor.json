@@ -1,0 +1,13 @@
+{
+  "name": "SpotlessGS",
+  "url": "https://github.com/Liianne/SpotlessGS",
+  "commit": "db380dcfc69083a3bfc4af74bab628c0b50d8bd9",
+  "parts": {
+    "CUDA extensions": "not vendored here: SpotlessGS commits Inria's diff-gaussian-rasterization and simple-knn into its repo, identical to third_party/darkgs/submodules except two '#include' lines that the DarkGS copy already has (compared 2026-11-17); methods/spotlessgs/setup_kaggle.sh builds those"
+  },
+  "changes": [
+    "git archive of arguments/, gaussian_renderer/, lpipsPyTorch/, scene/, utils/, train.py, render.py, metrics.py, model_parameters.pth (train.py reads it for the shape of so3), LICENSE.md, README.md, environment.yml; not vendored: SIBR_viewers (viewer), submodules (above), viz_chkpt.py, the logo"
+  ],
+  "runtime_patches": "applied by methods/spotlessgs/adapter.py on a COPY of this folder in the run's work dir: scene/dataset_readers.py N_TEST = 29 -> 0 (its COLMAP reader always held out the last 29 images); lietorch replaced by methods/spotlessgs/lietorch_shim (a learnable SO3). See methods/spotlessgs/README.md",
+  "check": "every file equals git archive of the commit (2026-11-17)"
+}

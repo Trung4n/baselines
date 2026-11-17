@@ -15,6 +15,7 @@ ATE tính bằng cm. `all` là ATE trên mọi frame, số chính để so giữ
 | GS-ICP SLAM | hình học (G-ICP) | 0.041 | 0.032 / 0.032 | 16.71 / 0.758 / 0.289 (`even`: 44.25 / 0.987 / 0.013) | 5.14 `lit`, 3.13 `even` (tính cả đọc ảnh; riêng vòng tracking 10.8, 10.6; T4, 1 GPU, GICP trên CPU) | 1 |
 | LoopSplat | quang trắc + độ sâu, submap, có đóng vòng | 0.72 | 105.0 / 106.1 | 20.71 / 0.869 / 0.144, trên tập dịch lưới (`even`: 45.09 / 0.987 / 0.010) | 0.53 `lit`, 0.50 `even` (T4, 1 GPU) | 1 |
 | VarSplat | như LoopSplat, cộng trọng số pixel theo phương sai màu học được | 0.85 | 99.3 / 100.0 | 20.89 / 0.872 / 0.142, trên tập dịch lưới (`even`: 45.03 / 0.987 / 0.010) | 0.35 `lit`, 0.35 `even` (T4, 1 GPU) | 1 |
+| NFL-BA | quang trắc + độ sâu (MonoGS) với đèn điểm tại tâm camera | 6.29 | 109.2 / 109.6 | 12.91 / 0.529 / 0.548 (`even`: 22.24 / 0.803 / 0.338) | 0.29 `lit`, 0.46 `even` (T4, 1 GPU) | 1, **chưa có run đối chứng** |
 | SEGS-SLAM | đặc trưng (ORB-SLAM3) + bản đồ anchor, nhúng ngoại hình theo pose | 2.78 | 3.06 / 3.30 (có 1 loop closure) | 21.57 / 0.815 / 0.220, mapper 30000 vòng (`even`: 38.68 / 0.964 / 0.041) | 25.2 `lit`, 24.0 `even` (gồm đọc ảnh từ ổ cục bộ; riêng tracking 28.8, 27.1; T4, 1 GPU, tracking trên CPU) | 1 |
 
 **Kết quả phụ** (không vào bảng chính; Photo-SLAM thay chỗ, cùng tracking):
@@ -22,6 +23,12 @@ ATE tính bằng cm. `all` là ATE trên mọi frame, số chính để so giữ
 | Phương pháp | Loại tracking | `office0` `even`: ATE all | `office0` `lit`: ATE all / kf | FPS | Số run |
 |---|---|---|---|---|---|
 | ORB-SLAM3 RGB-D | đặc trưng | 1.36 | 3.55 / 3.94 (có 1 loop closure) | 5.51 `lit`, 5.56 `even` (gồm đọc ảnh từ `/kaggle/input`; riêng tracking 54, 51; CPU 4 nhân) | 1 |
+
+**Nhóm C: 3DGS ngoại tuyến, pose cho trước** (`PROTOCOL.md`, mục "Nhóm C"): train tại pose **tham chiếu** trên 400 ảnh lưới 0, chấm trên **lưới dịch** (frame 2, 7, 12, …) tại pose tham chiếu; không có ATE, không có FPS. So với các dòng trên (pose ước lượng, lưới 0 trừ keyframe) phải ghi rõ hai khác biệt đó.
+
+| Phương pháp | Mô hình đèn | `office0` `lit`: PSNR / SSIM / LPIPS | Thời gian train | Số run |
+|---|---|---|---|---|
+| DarkGS | MLP đèn hiệu chuẩn của đồ án (D106), ánh sáng nền × cos | 32.41 / 0.942 / 0.091 | 596 s (30000 vòng, T4) | 1 |
 
 **Cần chạy lại cho đồng nhất:**
 - MonoGS gốc trên `lit` và `even` bằng code hiện tại, có `--record`, để có ATE all, PSNR và FPS cùng giao thức.
@@ -50,6 +57,9 @@ ATE tính bằng cm. `all` là ATE trên mọi frame, số chính để so giữ
 | 2026-11-16 | SEGS-SLAM `2110994a` | office0 / even | 2.776 | 2.681 | 38.68 | 0.9636 | 0.0405 | 24.0 | T4, 1 GPU | `results/segsslam__office0_even/2026-11-16-10-19-28`; 1 bản đồ, 2000/2000 frame OK, 100 keyframe, không loop closure; 57.1k anchor, mapper 3008 vòng ở frame cuối rồi tới 30000 (729 s); 385 frame chấm ảnh; riêng tracking 27.1 FPS |
 | 2026-11-17 | VarSplat `4a21a0aa` | office0 / lit | 99.32 | 99.99 | 20.89 | 0.8725 | 0.1417 | 0.346 | T4, 1 GPU | `results/varsplat__office0_lit/2026-11-16-15-37-38`; 39 submap, 424 keyframe; gãy ở frame 255 (bước 14.4 cm trong một frame); 2 lần tối ưu pose graph (frame 1095, 1175); 395 frame chấm ảnh trên tập dịch lưới; bộ nhớ GPU đỉnh 1.41 GB |
 | 2026-11-17 | VarSplat `4a21a0aa` | office0 / even | 0.848 | 0.828 | 45.03 | 0.9869 | 0.0105 | 0.355 | T4, 1 GPU | `results/varsplat__office0_even/2026-11-16-17-18-32`; 28 submap, 424 keyframe; 4 lần tối ưu pose graph (frame 700, 1100, 1765, 1835); 396 frame chấm ảnh; bộ nhớ GPU đỉnh 1.57 GB |
+| 2026-11-17 | NFL-BA `a01ae39d` | office0 / lit | 109.19 | 109.65 | 12.91 | 0.5294 | 0.5483 | 0.290 | T4, 1 GPU | `results/nflba__office0_lit/2026-11-17-08-16-48`; config Replica RGB-D của MonoGS + `nfl: True`; 389 keyframe, 342k Gaussian; gãy ở frame 82–90; 320 frame chấm ảnh |
+| 2026-11-17 | NFL-BA `a01ae39d` | office0 / even | 6.290 | 6.043 | 22.24 | 0.8030 | 0.3382 | 0.464 | T4, 1 GPU | `results/nflba__office0_even/2026-11-17-10-17-07`; 391 keyframe, 36.6k Gaussian; 310 frame chấm ảnh |
+| 2026-11-17 | DarkGS `32945fcd` | office0 / lit | – (pose cho trước) | – | 32.41 | 0.9421 | 0.0907 | – | T4, 1 GPU | `results/darkgs__office0_lit/2026-11-17-12-15-07`; nhóm C: pose tham chiếu, 400 ảnh train, 30000 vòng (596 s); chấm 400 frame lưới dịch; 234k Gaussian; ánh sáng nền học được 0.059 (từ 0.05), `scaling_factor` 1.61 (từ 1) |
 
 Trong ngoặc là số sau color refinement. MonoGS log cả hai dòng `mean psnr` trước và sau refine.
 
@@ -62,8 +72,9 @@ Năm frame chung: 100, 500, 825, 1125, 1750 (`PROTOCOL.md`). Ảnh của từng 
 | office0 / lit | (chưa có) | Quan sát, Đồ án, MonoGS gốc, SplaTAM, GS-ICP |
 | office0 / lit, chỉ SplaTAM | `results/figures_splatam_office0_lit.png` | Quan sát, SplaTAM |
 | office0 / even, chỉ SplaTAM | `results/figures_splatam_office0_even.png` | Quan sát, SplaTAM |
-| office0 / lit | `results/figures_office0_lit.png` | Quan sát, SplaTAM, GS-ICP, Photo-SLAM, SEGS-SLAM, LoopSplat, VarSplat (2026-11-17) |
-| office0 / even | `results/figures_office0_even.png` | Quan sát, SplaTAM, GS-ICP, Photo-SLAM, SEGS-SLAM, LoopSplat, VarSplat (2026-11-17) |
+| office0 / lit | `results/figures_office0_lit.png` | Quan sát, SplaTAM, GS-ICP, Photo-SLAM, SEGS-SLAM, LoopSplat, VarSplat, NFL-BA (2026-11-17) |
+| office0 / even | `results/figures_office0_even.png` | Quan sát, SplaTAM, GS-ICP, Photo-SLAM, SEGS-SLAM, LoopSplat, VarSplat, NFL-BA (2026-11-17) |
+| office0 / lit, nhóm C | `results/figures_darkgs_office0_lit.png` | Quan sát, DarkGS (pose cho trước), SEGS-SLAM (để so) |
 
 ## Ghi chú cho báo cáo
 
@@ -140,3 +151,22 @@ Năm frame chung: 100, 500, 825, 1125, 1750 (`PROTOCOL.md`). Ảnh của từng 
 - **Vì sao trọng số không có tác dụng: với cấu hình Replica của tác giả, trọng số gần như bằng 1 ở mọi nơi.** Trọng số tracking là `exp(−(log v − trung vị)/τ_track)`, kẹp trong [1/3, 3], với τ_track = 100. Đọc phương sai học được trong các submap của run `lit` (cả submap frame 255–280, nơi gãy): log phương sai trải từ khoảng −14 (phân vị 1) tới −6 (phân vị 99), tức chênh khoảng 8 đơn vị quanh trung vị. Với τ = 100, 98% Gaussian có trọng số trong [0.975, 1.065]; tracking của VarSplat vì vậy thực chất là tracking không trọng số của LoopSplat. Giảm τ cũng không đủ: τ = 10 cho [0.78, 1.9]; chỉ τ = 3 mới chạm biên kẹp. Phương sai trên `lit` cũng chỉ cao hơn `even` một chút: trung vị log phương sai các submap đã đọc là −7.9 đến −9.0 trên `lit`, −9.1 đến −9.3 trên `even`. Một cách giải thích (chưa kiểm riêng): phương sai gắn với Gaussian cố định trong hệ thế giới, còn đĩa sáng đi theo camera, nên hầu hết bề mặt từng được chiếu đều đổi màu giữa các keyframe, không có nhóm Gaussian nào nổi bật là "không tin cậy". Đây là cấu hình công bố của tác giả, giữ nguyên theo quy tắc; một τ nhỏ hơn sẽ là biến thể tự chỉnh, không phải VarSplat như công bố.
 - **PSNR, như LoopSplat:** mỗi frame render bằng submap của nó, frame chấm cách frame mapping 2 frame, nên PSNR thiên về phía có lợi và đo độ khớp cục bộ, không phải bản đồ toàn cục (ghi chú LoopSplat ở trên). Ảnh 5 frame chung của VarSplat gần như trùng LoopSplat, đĩa sáng nung vào màu.
 - **FPS:** 0.35 trên một T4, chậm hơn LoopSplat (0.50–0.53) khoảng 1.5 lần: rasterizer có thêm kênh phương sai, và VarSplat ghi log ra file ở mọi dòng in. Bộ nhớ GPU đỉnh 1.4–1.6 GB, có bản vá giữ bản chụp phương sai thay cho cả mô hình submap (`methods/varsplat/README.md`).
+
+### NFL-BA trên `office0` (2026-11-17, mỗi biến thể một run; **chưa có run đối chứng**)
+
+- **Vì sao quan trọng:** NFL-BA (NeurIPS 2025) giải đúng bài toán của đồ án (đèn gắn camera) bằng một mô hình đèn vật lý trong loss của **MonoGS**, cùng nền với đồ án: đèn điểm đẳng hướng đặt tại tâm camera, suy giảm 1/d², Lambert theo pháp tuyến là trục ngắn nhất của Gaussian, giữ bù affine, bỏ pixel xám ≥ 0.9 (`methods/nflba/README.md`). Chạy với config Replica RGB-D của MonoGS cộng `nfl: True`.
+- **Kết quả: hỏng trên `lit`, kém MonoGS gốc trên `even`.** `lit`: ATE 109.2 cm, PSNR 12.91, kém cả MonoGS gốc (84 cm, code cũ). `even`: ATE 6.29 cm, PSNR 22.24, trong khi MonoGS gốc khoảng 1.1 cm (kf, D133) và LoopSplat/SplaTAM khoảng 0.7–0.8 cm, PSNR 39–45.
+- **Kiểu hỏng trên `lit`:** gãy rất sớm, ở frame 82–90 (căn chỉnh trên 30 frame đầu: 4 cm ở frame 80, 24 cm ở frame 90), trước đoạn bảng trắng nơi SplaTAM và LoopSplat gãy. RPE mỗi 10 frame có trung vị 4–11 cm suốt chuỗi; quãng đường ước lượng 58.9 m so với 18.2 m thật. Bản đồ vỡ (342k Gaussian, so với 36.6k trên `even`); ảnh 5 frame chung không nhận ra cảnh.
+- **Trên `even`:** hình học của ảnh render nhận ra được, nhưng màu loang lổ. Dữ liệu `even` không có đèn gắn camera, mà NFL-BA vẫn áp shading 1/d²·cos lên mọi Gaussian, nên bản đồ phải bù bằng màu sai. Đây là kết quả dự đoán được: NFL-BA giả định luôn có đèn đồng hành.
+- **Giải thích đề xuất cho `lit`, chưa kiểm:** dữ liệu là đèn **spot** lệch 5 cm, nón 60°, có ánh sáng nền. NFL-BA giả định đèn điểm **đẳng hướng** tại tâm camera, nên dự đoán vùng ngoài nón vẫn sáng như trong nón. Phần lớn ảnh nằm ngoài nón (tối, chỉ có ánh sáng nền), nên mô hình sai trên phần lớn pixel. Thêm vào đó, pháp tuyến của Gaussian mới tạo (đẳng hướng) là trục tùy ý cho tới khi mapping kéo dẹt chúng.
+- **Cần run đối chứng trước khi đưa vào báo cáo:** cùng code NFL-BA, cùng adapter, tắt `nfl`. Nếu `even` cho khoảng 1 cm như MonoGS gốc, thì mức hỏng ở trên là do mô hình đèn; nếu không, có thể còn khác biệt khác (adapter, config, phiên bản torch).
+- **FPS:** 0.29 (`lit`) và 0.46 (`even`) trên một T4, "Total time" của MonoGS. Chậm hơn MonoGS gốc của đồ án (2.28 trên `even`, code đã tối ưu D128–D136, T4 x2). NFL-BA tính màu từ SH trên Python và shading trên từng Gaussian ở mọi lần render. Bản đồ `lit` lớn gấp 9 lần `even`, nên chậm hơn.
+
+### DarkGS trên `office0 lit` (2026-11-17, nhóm C, một run)
+
+- **Giao thức nhóm C** (`PROTOCOL.md`): pose tham chiếu, 400 ảnh train (lưới 0), đèn **hiệu chuẩn của đồ án** (D106) đổi sang MLP của DarkGS (`methods/darkgs/fit_light.py`, khớp 2.2%), ánh sáng nền bắt đầu ở 0.05 như mô hình chính, 30000 vòng (mặc định), chấm 400 frame lưới dịch tại pose tham chiếu.
+- **Kết quả: PSNR 32.41, SSIM 0.942, LPIPS 0.091**, cao nhất trong các phương pháp so sánh trên `lit` (các hệ SLAM 13–22 dB). Ảnh 5 frame chung (`results/figures_darkgs_office0_lit.png`) có hình học sắc, đĩa sáng đúng chỗ và đúng độ sáng; còn vài đốm màu lạ trong nón. Cùng bài toán, mô hình đèn vật lý đã hiệu chuẩn: điều này xác nhận hướng mô hình đèn tường minh của đồ án.
+- **So với mô hình chính của đồ án** (PSNR 35.84 và 36.28 trước refine, 36.28 và 37.14 sau refine, hai run): đồ án cao hơn khoảng 3.4–4.7 dB, dù DarkGS được lợi ở mọi mặt: pose đúng, train ngoại tuyến 30000 vòng trên mọi ảnh train, frame chấm chỉ cách ảnh train 2 frame. Hai tập frame chấm khác nhau (lưới dịch so với lưới 0 trừ keyframe), nên đây là so sánh gần đúng; muốn so chặt, chấm bản đồ của đồ án theo đúng giao thức nhóm C (render tại pose tham chiếu trên lưới dịch).
+- **Sai ở đâu:** PSNR trong nón 30.6 dB, ngoài nón 33.8 dB (50 frame). Vùng trong nón sáng nên cùng sai số tương đối cho sai số tuyệt đối lớn hơn; MLP của DarkGS khớp bảng Φ chỉ tới 2.2% ở rìa nón, và tâm nón hay bão hòa. Theo đoạn, PSNR 29.7–35.8; thấp nhất ở frame 200–399 (bảng trắng, bão hòa) và 600–799. Frame tệ nhất 1732 (20.2 dB): camera nhìn sát trần, vùng gần như không có trong ảnh train.
+- **Mô hình khác đồ án:** DarkGS tính `albedo · (đèn + nền) · cos(n, l)`, tức ánh sáng nền cũng nhân cos theo hướng đèn; ánh sáng nền học được 0.059, thấp hơn mức của dữ liệu (0.12, nhân albedo không có cos). DarkGS còn tự học `scaling_factor` (thang của hình học trong shading) dù pose đã theo mét: trôi từ 1 lên 1.61. Thang này đổi khoảng cách tới đèn tương đối với độ lệch `t_l2c`, nên có thể đang bù một phần sai khác của mô hình (chưa kiểm).
+- **Không có run `even`:** dữ liệu `even` không có đèn gắn camera (`methods/darkgs/README.md`).

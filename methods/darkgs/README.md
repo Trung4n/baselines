@@ -59,4 +59,8 @@ Còn lại là mặc định của DarkGS: 30000 vòng, warm-up tư thế đèn 
 
 ## Đã chạy
 
-(chưa có)
+| Ngày | Biến thể | PSNR / SSIM / LPIPS (lưới dịch, pose tham chiếu) | Thời gian train | Gaussian | Học được | Thư mục |
+|---|---|---|---|---|---|---|
+| 2026-11-17 | office0 / lit | 32.41 / 0.942 / 0.091 | 596 s (30000 vòng) | 234k | ánh sáng nền 0.059, `scaling_factor` 1.61 | `results/darkgs__office0_lit/2026-11-17-12-15-07` |
+
+Chạy hết trên Kaggle ngay lần đầu (runner chép cả `traj.txt`, bước dò, train, render, đóng zip). PSNR train (tuyến tính, DarkGS tự báo) 33.2. Phân tích ở `RESULTS.md`.
