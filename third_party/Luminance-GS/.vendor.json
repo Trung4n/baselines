@@ -1,0 +1,16 @@
+{
+  "name": "Luminance-GS (CVPR 2025)",
+  "url": "https://github.com/cuiziteng/Luminance-GS",
+  "commit": "f9b4b86692a3fa676e90f42236c6237f443e7e23",
+  "commit_date": "2026-05-13",
+  "license": "Apache-2.0 (Luminance-GS/LICENSE)",
+  "parts": {
+    "gsplat (bundled)": "Luminance-GS/gsplat: the repository's own copy of gsplat 1.0.0's CUDA backend, with rasterization.cu and _wrapper.py changed (channel counts 5, 9, 17, 33) and rendering_double.py added; it is JIT-compiled from these sources (gsplat itself is NOT pip-installed: a pip gsplat would be imported first by _backend.py and lacks those kernels)",
+    "glm": "not vendored: gsplat 1.0.0's submodule pin g-truc/glm @ 45008b225e28eb700fa0f7d3ff69b7c1db94fadf (git ls-tree of nerfstudio-project/gsplat v1.0.0), fetched by methods/luminancegs/setup_kaggle.sh and copied into csrc/third_party/glm by the adapter (the repository lost the submodule)"
+  },
+  "changes": [
+    "exported with git archive; only what simple_trainer_ours.py needs to train and render with the default (LOM 'low') loader: README.md, Luminance-GS/{LICENSE, README.md}, examples/{simple_trainer_ours.py, utils.py, tools.py, losses.py, requirements.txt}, examples/datasets/{colmap.py, normalize.py, traj.py}, gsplat/rendering_double.py, gsplat/cuda/ (Python and csrc). Not copied: docs, assets, pics, profiling, tests, setup.py, simple_trainer_3dgs.py, simple_viewer.py, image_fitting.py, tools_decompose.py, datasets/colmap_mip360.py (only for --exp_name variance), gsplat's other modules (rendering.py, cuda_legacy, ...): rendering_double.py imports cuda/ alone"
+  ],
+  "runtime_patches": "applied by methods/luminancegs/adapter.py on a COPY: 'from turtle import color' removed from simple_trainer_ours.py (unused; turtle needs tkinter); examples/datasets/__init__.py added (empty) so the Hugging Face 'datasets' package cannot shadow this namespace package; glm copied in. See methods/luminancegs/README.md",
+  "check": "every file equals git archive of the commit (2026-11-18)"
+}

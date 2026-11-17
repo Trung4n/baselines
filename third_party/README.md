@@ -15,6 +15,7 @@ Chép thẳng mã nguồn vào repo, không dùng submodule, để notebook Kagg
 | `darkgs/` | Trung4n/darkgs (bản fork của người dùng, từ tyz1030/darkgs `279bfa10`) | `32945fcd` (2026-09-21), kèm 2 extension Inria ở commit bản gốc ghim | `methods/darkgs/` (lietorch thay bằng `methods/darkgs/lietorch_shim`) |
 | `SpotlessGS/` | Liianne/SpotlessGS (chính chủ) | `db380dcf`, chỉ phần Python (extension CUDA dùng bản của `darkgs/`, giống hệt) | `methods/spotlessgs/` (`N_TEST` vá trên bản chép lúc chạy; lietorch thay bằng shim học được) |
 | `gsplat_examples/` | nerfstudio-project/gsplat, thư mục `examples/` | tag `v1.5.3`, chỉ các file `simple_trainer.py` cần; thư viện `gsplat==1.5.3` cài bằng pip | `methods/bilagrid/` (vá trên bản chép lúc chạy: train mọi ảnh, `datasets/__init__.py`, checkpoint lưu grid) |
+| `Luminance-GS/` | cuiziteng/Luminance-GS (chính chủ, Apache-2.0) | `f9b4b866` (2026-05-13), chỉ các file trainer cần, kèm backend gsplat 1.0.0 đã sửa của repo (JIT); glm tải lúc setup (`g-truc/glm` `45008b22`, pin của gsplat 1.0.0) | `methods/luminancegs/` (vá trên bản chép lúc chạy: bỏ `import turtle`, `datasets/__init__.py`, glm) |
 | `GS_ICP_SLAM/` | Lab-of-AI-and-Robotics/GS_ICP_SLAM | `5f996a87` (2026-06-20), kèm 3 submodule ở commit nó ghim (rasterizer, fast_gicp, simple-knn) | `methods/gsicp/` |
 
 Quy tắc:

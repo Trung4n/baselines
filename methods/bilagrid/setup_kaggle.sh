@@ -7,7 +7,7 @@
 #   gsplat_examples); its CUDA code is compiled on first use (needs nvcc and
 #   ninja), which the probe triggers here, for this GPU;
 # - the trainer's requirements (examples/requirements.txt) at its pins:
-#   pycolmap (rmbrualla fork), nerfview, fused-ssim (CUDA, built here), viser,
+#   pycolmap (rmbrualla fork, patched for numpy 2 by common/install_pycolmap_fork.sh), nerfview, fused-ssim (CUDA, built here), viser,
 #   tyro, ...; fused-bilagrid is not needed (lib_bilagrid.py is used);
 # - a probe (methods/bilagrid/probe.py).
 set -euo pipefail
@@ -20,8 +20,8 @@ export TORCH_CUDA_ARCH_LIST="$ARCH" MAX_JOBS="${MAX_JOBS:-4}"
 UV=("$PYTHON" -m uv pip install --system --python "$PYTHON" --break-system-packages --index-strategy unsafe-best-match)
 "${UV[@]}" "gsplat==1.5.3" ninja viser "tyro>=0.8.8" "imageio[ffmpeg]" scikit-learn "torchmetrics[image]" tensorboard \
     tensorly pyyaml matplotlib opencv-python splines
-"${UV[@]}" "pycolmap @ git+https://github.com/rmbrualla/pycolmap@cc7ea4b7301720ac29287dbe450952511b32125e" \
-    "nerfview @ git+https://github.com/nerfstudio-project/nerfview@4538024fe0d15fd1a0e4d760f3695fc44ca72787"
+"${UV[@]}" "nerfview @ git+https://github.com/nerfstudio-project/nerfview@4538024fe0d15fd1a0e4d760f3695fc44ca72787"
+bash "$HERE/../../common/install_pycolmap_fork.sh"   # the rmbrualla fork at its pin, patched for numpy 2
 if ! "$PYTHON" -c "import fused_ssim" 2>/dev/null; then
     echo "=== building fused-ssim for sm $ARCH"
     "$PYTHON" -m pip install -v --no-build-isolation \

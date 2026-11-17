@@ -162,18 +162,21 @@ def write_binary(sparse, idxs, c2w, cal, xyz, rgb):
             f.write(struct.pack("<Q3d3BdQ", j + 1, *p, *(int(x) for x in c), 0.0, 0))
 
 
-def build(out, idxs, colors, depths, c2w, cal, binary=False):
+def build(out, idxs, colors, depths, c2w, cal, binary=False, cams=None):
     """Writes the package under out/; returns the point-cloud statistics.
-    binary: also COLMAP's binary model (write_binary), same content."""
+    binary: also COLMAP's binary model (write_binary), same content.
+    cams: the frames listed as images (images/, images.txt/.bin), default idxs;
+    the point cloud always comes from idxs (the training frames)."""
+    cams = list(idxs) if cams is None else list(cams)
     images, sparse = os.path.join(out, "images"), os.path.join(out, "sparse", "0")
     os.makedirs(images)
     os.makedirs(sparse)
-    for i in idxs:
+    for i in cams:
         os.symlink(os.path.abspath(colors[i]), os.path.join(images, "frame%06d.jpg" % i))
     write_cameras(os.path.join(sparse, "cameras.txt"), cal)
-    write_images(os.path.join(sparse, "images.txt"), idxs, c2w)
+    write_images(os.path.join(sparse, "images.txt"), cams, c2w)
     xyz, rgb, nrm, stats = make_points(idxs, colors, depths, c2w, cal)
     write_ply(os.path.join(sparse, "points3D.ply"), xyz, rgb, nrm)
     if binary:
-        write_binary(sparse, idxs, c2w, cal, xyz, rgb)
+        write_binary(sparse, cams, c2w, cal, xyz, rgb)
     return stats

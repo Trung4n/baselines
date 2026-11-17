@@ -28,6 +28,7 @@ python baselines/common/score.py --method bilagrid_nngrid --dataset <dataset> --
 |---|---|
 | `datasets/colmap.py`: train trên **mọi** ảnh | Gốc giữ lại mỗi ảnh thứ `test_every` (mặc định 8), **luôn gồm ảnh 0**, để tự đánh giá. Giao thức train trên đủ lưới 0 và chấm trên lưới dịch |
 | Thêm `datasets/__init__.py` rỗng | `examples/datasets/` của gsplat là namespace package; trên Kaggle có gói `datasets` của Hugging Face, sẽ che mất nó khi import |
+| `pycolmap` (bản fork rmbrualla, đúng commit gsplat ghim) vá cho numpy 2 lúc cài (`common/install_pycolmap_fork.sh`): `INVALID_POINT3D = np.uint64(-1)` thành `np.uint64(2**64 - 1)`, cùng giá trị | Kaggle (2026-11-18) dùng Python 3.13 với numpy 2: dòng gốc báo `OverflowError` ngay khi import. Ghim `numpy<2` như `examples/requirements.txt` của gsplat là không thể, vì numpy 1.x không có bản cho Python 3.13. Đã kiểm trong env Python 3.13 + numpy 2.5.5: gói nhị phân và parser của gsplat đọc ra pose, điểm, phép chuẩn hóa trùng numpy 1 (lệch ≤ 2e-15) |
 | `simple_trainer.py`: checkpoint lưu thêm `bil_grids` | Bản gốc chỉ lưu Gaussian, nên không render được `renders_nngrid/` từ checkpoint. Không đổi việc train |
 
 ## Kỹ thuật
