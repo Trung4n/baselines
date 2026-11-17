@@ -14,6 +14,7 @@ Chép thẳng mã nguồn vào repo, không dùng submodule, để notebook Kagg
 | `VarSplat/` | anhthuan1999/varsplat (chính chủ, CVPR 2026) | `4a21a0aa` (2026-06-14), kèm gói `hloc` và 3 submodule ở commit nó ghim (`simple-knn`, `gaussian_rasterizer_var`, `diff-gaussian-rasterization-w-pose-var`) trong `thirdparty/` | `methods/varsplat/` |
 | `darkgs/` | Trung4n/darkgs (bản fork của người dùng, từ tyz1030/darkgs `279bfa10`) | `32945fcd` (2026-09-21), kèm 2 extension Inria ở commit bản gốc ghim | `methods/darkgs/` (lietorch thay bằng `methods/darkgs/lietorch_shim`) |
 | `SpotlessGS/` | Liianne/SpotlessGS (chính chủ) | `db380dcf`, chỉ phần Python (extension CUDA dùng bản của `darkgs/`, giống hệt) | `methods/spotlessgs/` (`N_TEST` vá trên bản chép lúc chạy; lietorch thay bằng shim học được) |
+| `gsplat_examples/` | nerfstudio-project/gsplat, thư mục `examples/` | tag `v1.5.3`, chỉ các file `simple_trainer.py` cần; thư viện `gsplat==1.5.3` cài bằng pip | `methods/bilagrid/` (vá trên bản chép lúc chạy: train mọi ảnh, `datasets/__init__.py`, checkpoint lưu grid) |
 | `GS_ICP_SLAM/` | Lab-of-AI-and-Robotics/GS_ICP_SLAM | `5f996a87` (2026-06-20), kèm 3 submodule ở commit nó ghim (rasterizer, fast_gicp, simple-knn) | `methods/gsicp/` |
 
 Quy tắc:

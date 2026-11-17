@@ -1,0 +1,14 @@
+{
+  "name": "gsplat examples (simple_trainer)",
+  "url": "https://github.com/nerfstudio-project/gsplat",
+  "commit": "v1.5.3",
+  "license": "Apache-2.0 (LICENSE)",
+  "parts": {
+    "gsplat library": "not vendored: pip gsplat==1.5.3 (the same release), installed by methods/bilagrid/setup_kaggle.sh; its CUDA code is compiled on first use"
+  },
+  "changes": [
+    "only the files simple_trainer.py needs to train and render: simple_trainer.py, utils.py, lib_bilagrid.py, gsplat_viewer.py (imported at module level), requirements.txt, datasets/colmap.py, datasets/normalize.py, datasets/traj.py, and LICENSE; copied from the v1.5.3 tag (codeload tarball) unchanged"
+  ],
+  "runtime_patches": "applied by methods/bilagrid/adapter.py on a COPY in the run's work dir: datasets/colmap.py trains on every image (upstream held out every test_every-th, always image 0); datasets/__init__.py added (empty) so the Hugging Face 'datasets' package installed on Kaggle cannot shadow this namespace package. simple_trainer.py also saves the bilateral grids (bil_grids) in its checkpoints. See methods/bilagrid/README.md",
+  "check": "files equal the v1.5.3 tag (2026-11-17)"
+}

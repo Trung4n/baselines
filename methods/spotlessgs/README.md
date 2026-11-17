@@ -45,4 +45,8 @@
 
 ## Đã chạy
 
-(chưa có)
+| Ngày | Biến thể | PSNR / SSIM / LPIPS (lưới dịch, pose tham chiếu) | Thời gian train | Gaussian | Đèn học được | Thư mục |
+|---|---|---|---|---|---|---|
+| 2026-11-17 | office0 / lit | 36.43 / 0.982 / 0.026 | 7602 s (30000 vòng) | 414k | t = (0.000, −0.072, −0.039) m, `gamma` 0.47, `scaling` 1.51 | `results/spotlessgs__office0_lit/2026-11-17-13-51-06` |
+
+Chạy hết trên Kaggle ngay lần đầu; bộ lọc output bỏ khoảng 422 nghìn dòng in tensor. PSNR train (sRGB, SpotlessGS tự báo) 40.6 ở vòng cuối. Phân tích ở `RESULTS.md`.

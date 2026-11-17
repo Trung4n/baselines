@@ -29,6 +29,7 @@ ATE tính bằng cm. `all` là ATE trên mọi frame, số chính để so giữ
 | Phương pháp | Mô hình đèn | `office0` `lit`: PSNR / SSIM / LPIPS | Thời gian train | Số run |
 |---|---|---|---|---|
 | DarkGS | MLP đèn hiệu chuẩn của đồ án (D106), ánh sáng nền × cos | 32.41 / 0.942 / 0.091 | 596 s (30000 vòng, T4) | 1 |
+| SpotlessGS | **không hiệu chuẩn**: đèn (vị trí, suy giảm, MLP phát sáng), BRDF dạng MLP, ánh sáng nền SH, học cùng bản đồ | 36.43 / 0.982 / 0.026 | 7602 s (30000 vòng, T4) | 1 |
 
 **Cần chạy lại cho đồng nhất:**
 - MonoGS gốc trên `lit` và `even` bằng code hiện tại, có `--record`, để có ATE all, PSNR và FPS cùng giao thức.
@@ -60,6 +61,7 @@ ATE tính bằng cm. `all` là ATE trên mọi frame, số chính để so giữ
 | 2026-11-17 | NFL-BA `a01ae39d` | office0 / lit | 109.19 | 109.65 | 12.91 | 0.5294 | 0.5483 | 0.290 | T4, 1 GPU | `results/nflba__office0_lit/2026-11-17-08-16-48`; config Replica RGB-D của MonoGS + `nfl: True`; 389 keyframe, 342k Gaussian; gãy ở frame 82–90; 320 frame chấm ảnh |
 | 2026-11-17 | NFL-BA `a01ae39d` | office0 / even | 6.290 | 6.043 | 22.24 | 0.8030 | 0.3382 | 0.464 | T4, 1 GPU | `results/nflba__office0_even/2026-11-17-10-17-07`; 391 keyframe, 36.6k Gaussian; 310 frame chấm ảnh |
 | 2026-11-17 | DarkGS `32945fcd` | office0 / lit | – (pose cho trước) | – | 32.41 | 0.9421 | 0.0907 | – | T4, 1 GPU | `results/darkgs__office0_lit/2026-11-17-12-15-07`; nhóm C: pose tham chiếu, 400 ảnh train, 30000 vòng (596 s); chấm 400 frame lưới dịch; 234k Gaussian; ánh sáng nền học được 0.059 (từ 0.05), `scaling_factor` 1.61 (từ 1) |
+| 2026-11-17 | SpotlessGS `db380dcf` | office0 / lit | – (pose cho trước) | – | 36.43 | 0.9823 | 0.0256 | – | T4, 1 GPU | `results/spotlessgs__office0_lit/2026-11-17-13-51-06`; nhóm C: pose tham chiếu, 400 ảnh train, 30000 vòng (7602 s); chấm 400 frame lưới dịch; 414k Gaussian; đèn học được t = (0.000, −0.072, −0.039) m, `gamma` 0.47, `scaling` 1.51; `N_TEST` vá 29 → 0 |
 
 Trong ngoặc là số sau color refinement. MonoGS log cả hai dòng `mean psnr` trước và sau refine.
 
@@ -75,6 +77,7 @@ Năm frame chung: 100, 500, 825, 1125, 1750 (`PROTOCOL.md`). Ảnh của từng 
 | office0 / lit | `results/figures_office0_lit.png` | Quan sát, SplaTAM, GS-ICP, Photo-SLAM, SEGS-SLAM, LoopSplat, VarSplat, NFL-BA (2026-11-17) |
 | office0 / even | `results/figures_office0_even.png` | Quan sát, SplaTAM, GS-ICP, Photo-SLAM, SEGS-SLAM, LoopSplat, VarSplat, NFL-BA (2026-11-17) |
 | office0 / lit, nhóm C | `results/figures_darkgs_office0_lit.png` | Quan sát, DarkGS (pose cho trước), SEGS-SLAM (để so) |
+| office0 / lit, nhóm C | `results/figures_groupC_office0_lit.png` | Quan sát, SpotlessGS, DarkGS (frame 500, 825, 1750) |
 
 ## Ghi chú cho báo cáo
 
@@ -170,3 +173,11 @@ Năm frame chung: 100, 500, 825, 1125, 1750 (`PROTOCOL.md`). Ảnh của từng 
 - **Sai ở đâu:** PSNR trong nón 30.6 dB, ngoài nón 33.8 dB (50 frame). Vùng trong nón sáng nên cùng sai số tương đối cho sai số tuyệt đối lớn hơn; MLP của DarkGS khớp bảng Φ chỉ tới 2.2% ở rìa nón, và tâm nón hay bão hòa. Theo đoạn, PSNR 29.7–35.8; thấp nhất ở frame 200–399 (bảng trắng, bão hòa) và 600–799. Frame tệ nhất 1732 (20.2 dB): camera nhìn sát trần, vùng gần như không có trong ảnh train.
 - **Mô hình khác đồ án:** DarkGS tính `albedo · (đèn + nền) · cos(n, l)`, tức ánh sáng nền cũng nhân cos theo hướng đèn; ánh sáng nền học được 0.059, thấp hơn mức của dữ liệu (0.12, nhân albedo không có cos). DarkGS còn tự học `scaling_factor` (thang của hình học trong shading) dù pose đã theo mét: trôi từ 1 lên 1.61. Thang này đổi khoảng cách tới đèn tương đối với độ lệch `t_l2c`, nên có thể đang bù một phần sai khác của mô hình (chưa kiểm).
 - **Không có run `even`:** dữ liệu `even` không có đèn gắn camera (`methods/darkgs/README.md`).
+
+### SpotlessGS trên `office0 lit` (2026-11-17, nhóm C, một run)
+
+- **Giao thức nhóm C** như DarkGS (pose tham chiếu, 400 ảnh train, chấm 400 frame lưới dịch). Khác DarkGS: đèn **không hiệu chuẩn**, học từ mặc định của SpotlessGS như bản công bố; ảnh sRGB đưa thẳng vào; bộ đọc COLMAP vá `N_TEST` 29 → 0 (`methods/spotlessgs/README.md`).
+- **Kết quả: PSNR 36.43, SSIM 0.982, LPIPS 0.026**, tốt nhất trong mọi phương pháp so sánh, hơn DarkGS 4.0 dB. PSNR ngang mô hình chính của đồ án (35.84 và 36.28 trước refine, 36.28 và 37.14 sau refine), SSIM và LPIPS tốt hơn rõ (đồ án khoảng 0.96 và 0.04). Ảnh 5 frame chung (`results/figures_groupC_office0_lit.png`) gần như trùng ảnh quan sát.
+- **Hơn DarkGS ở cả trong và ngoài nón:** PSNR trong nón 34.8 (DarkGS 30.6), ngoài nón 40.8 (DarkGS 33.8). Phần lớn chênh lệch ở vùng chỉ có ánh sáng nền: SpotlessGS học ánh sáng nền dạng SH theo pháp tuyến và một BRDF dạng MLP, còn DarkGS nhân ánh sáng nền với cos theo hướng đèn (sai với dữ liệu). Theo đoạn, PSNR 33.8–39.8; frame tệ nhất vẫn là đoạn nhìn sát trần 1727–1742 (26–27 dB).
+- **Đèn học được không mang nghĩa vật lý:** vị trí (0.000, −0.072, −0.039) m so với vị trí thật (0, −0.050, 0) m; số mũ suy giảm `gamma` 0.47 thay vì 1 (1/d²); `scaling_factor` trôi lên 1.51 dù pose theo mét; hướng đèn đứng yên (đặc điểm của mã gốc, README). MLP BRDF và SH đủ linh hoạt để khớp ảnh dù tham số đèn sai. Đây là chất lượng **tổng hợp ảnh** ở pose đã thấy gần đó, không phải bằng chứng tách đúng đèn và albedo.
+- **Cách đọc cho báo cáo:** SpotlessGS được lợi ở mọi mặt so với đồ án: pose đúng, ngoại tuyến 2.1 giờ train trên T4 (đồ án trực tuyến khoảng 3 FPS, tự ước lượng pose), frame chấm chỉ cách ảnh train 2 frame, tập frame chấm khác. Muốn so công bằng cần: (1) chấm bản đồ của đồ án theo đúng giao thức nhóm C (pose tham chiếu, lưới dịch); (2) so bản đồ **albedo** với pass albedo (`tools/verify/eval_map.py`), nơi một mô hình vật lý đúng có thể tách tốt hơn một mô hình học linh hoạt. Cả hai chưa làm.

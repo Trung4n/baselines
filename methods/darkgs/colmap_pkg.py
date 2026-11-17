@@ -138,8 +138,33 @@ def write_ply(path, xyz, rgb, nrm):
         f.write(el.tobytes())
 
 
-def build(out, idxs, colors, depths, c2w, cal):
-    """Writes the package under out/; returns the point-cloud statistics."""
+def write_binary(sparse, idxs, c2w, cal, xyz, rgb):
+    """COLMAP's binary model (cameras.bin, images.bin, points3D.bin; no 2D points, no tracks), the
+    same content as the text files and the .ply, for readers that need it: gsplat's pycolmap fork
+    reads .bin first and its text reader is broken under Python 3 (np.array(map(...)))."""
+    import struct
+
+    with open(os.path.join(sparse, "cameras.bin"), "wb") as f:  # model 1 = PINHOLE: fx, fy, cx, cy
+        f.write(struct.pack("<Q", 1))
+        f.write(struct.pack("<IiQQ", 1, 1, cal["width"], cal["height"]))
+        f.write(struct.pack("<4d", cal["fx"], cal["fy"], cal["cx"] + 0.5, cal["cy"] + 0.5))
+    with open(os.path.join(sparse, "images.bin"), "wb") as f:
+        f.write(struct.pack("<Q", len(idxs)))
+        for k, i in enumerate(idxs):
+            R_w2c = c2w[i][:3, :3].T
+            q, t = rotmat2qvec(R_w2c), -R_w2c @ c2w[i][:3, 3]
+            f.write(struct.pack("<I4d3dI", k + 1, *q, *t, 1))
+            f.write(("frame%06d.jpg" % i).encode() + b"\x00")
+            f.write(struct.pack("<Q", 0))
+    with open(os.path.join(sparse, "points3D.bin"), "wb") as f:
+        f.write(struct.pack("<Q", len(xyz)))
+        for j, (p, c) in enumerate(zip(xyz.astype(np.float64), rgb)):
+            f.write(struct.pack("<Q3d3BdQ", j + 1, *p, *(int(x) for x in c), 0.0, 0))
+
+
+def build(out, idxs, colors, depths, c2w, cal, binary=False):
+    """Writes the package under out/; returns the point-cloud statistics.
+    binary: also COLMAP's binary model (write_binary), same content."""
     images, sparse = os.path.join(out, "images"), os.path.join(out, "sparse", "0")
     os.makedirs(images)
     os.makedirs(sparse)
@@ -149,4 +174,6 @@ def build(out, idxs, colors, depths, c2w, cal):
     write_images(os.path.join(sparse, "images.txt"), idxs, c2w)
     xyz, rgb, nrm, stats = make_points(idxs, colors, depths, c2w, cal)
     write_ply(os.path.join(sparse, "points3D.ply"), xyz, rgb, nrm)
+    if binary:
+        write_binary(sparse, idxs, c2w, cal, xyz, rgb)
     return stats
