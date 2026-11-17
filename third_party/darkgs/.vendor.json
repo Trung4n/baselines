@@ -1,0 +1,16 @@
+{
+  "name": "DarkGS",
+  "url": "https://github.com/Trung4n/darkgs",
+  "commit": "32945fcdd20aeb7498fd263ed7bdf158ddc4036f",
+  "commit_date": "2026-09-21 23:06:55 +0700",
+  "upstream": {"url": "https://github.com/tyz1030/darkgs", "commit": "279bfa10c0e16eb62e34ee076444fd8cdbaa1fb3", "commit_date": "2025-01-29 13:28:49 -0500",
+               "submodules": {"submodules/diff-gaussian-rasterization": "graphdeco-inria/diff-gaussian-rasterization @ 59f5f77e3ddbac3ed9db93ec2cfe99ed6c5d121d",
+                              "submodules/simple-knn": "gitlab.inria.fr/bkerbl/simple-knn @ f155ec04131cb579f53443a06879d37115f4612f"}},
+  "fork_changes": "the user's fork of the official DarkGS (IROS 2024): the two submodules committed into the repo at the upstream pins (no SIBR_viewers); train.py --linearize (sRGB-encoded inputs converted to linear on load), --scaling_factor (1.0 for metric poses), --light_params, optional W&B, a stop on the first non-finite loss; scene/light.py guards against z = 0 and sqrt(0) (NaN gradients); a warning for all-zero initial normals. methods/darkgs/README.md",
+  "changes": [
+    "exported with git archive (no .git); removed, not used to build or run: README images (darkgs.gif, cmu_ri_logo.png, NOAA_logo_mobile.svg); submodules/diff-gaussian-rasterization/third_party/glm/doc and test"
+  ],
+  "build_patches": "not applied here: methods/darkgs/setup_kaggle.sh builds COPIES of the two extensions with '#include <cstdint>' / '#include <cfloat>' added when missing",
+  "runtime_patches": "lietorch is not installed: methods/darkgs/lietorch_shim/lietorch.py (SO3 in torch) is put first on PYTHONPATH; the light rotation is frozen in training (ShadingModel.set_optimizer), see the README",
+  "check": "every file equals git archive of the commit, minus the removals above (2026-11-17)"
+}

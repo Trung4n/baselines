@@ -98,10 +98,20 @@ def main(argv=None):
     if os.path.exists(out):
         raise SystemExit(f"{out} exists: results are never overwritten")
     renders = os.path.join(run, "renders")
-    cmd = ["--method", method["method"], "--dataset", args.dataset,
-           "--traj", os.path.join(run, "traj_est.tum"), "--timing", os.path.join(run, "timing.json"),
+    cmd = ["--method", method["method"], "--dataset", args.dataset, "--timing", os.path.join(run, "timing.json"),
            "--out", out, "--method_commit", method["commit"], "--notes", method["notes"],
            "--wandb" if args.wandb else "--no_wandb"]
+    # Group C (PROTOCOL.md): mapping at given reference poses, no trajectory to score.
+    given = method.get("given_poses")
+    if given is None:
+        cmd += ["--traj", os.path.join(run, "traj_est.tum")]
+    elif given == "reference":
+        if int(method.get("heldout_offset", 0)) != protocol.HELDOUT_OFFSET:
+            raise ValueError(f"given_poses runs are scored on the held-out grid: method.json needs "
+                             f"heldout_offset {protocol.HELDOUT_OFFSET} (PROTOCOL.md, Nhóm C)")
+        cmd += ["--given_poses"]
+    else:
+        raise ValueError(f"method.json given_poses {given!r}: PROTOCOL.md allows only 'reference'")
     if os.path.isfile(os.path.join(run, "keyframes.txt")):
         cmd += ["--keyframes", os.path.join(run, "keyframes.txt")]
     cmd += ["--renders", renders] if os.path.isdir(renders) else ["--no_render"]

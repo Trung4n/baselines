@@ -57,7 +57,10 @@ NFL-BA không có cấu hình Replica, nên gốc là **cấu hình Replica RGB-
 
 ## Kỹ thuật
 
-(điền sau khi chạy thử cục bộ)
+- Đã kiểm cục bộ (WSL, GTX 1650; 2 extension build vào thư mục `--target` riêng, không đụng môi trường MonoGS; NFL-BA tải ở commit ghim bằng git như setup):
+  - `probe.py`: qua. Tạo Gaussian từ độ sâu, render bật mô hình đèn tối hơn đúng trong giới hạn lý thuyết (trung vị 0.27, lớn nhất 0.34, giới hạn 0.53), tracking đưa camera lệch 2 cm về 0.11 mm, mapping có gradient.
+  - Toàn bộ vòng SLAM: **không chạy được trên WSL**. Backend của MonoGS là tiến trình con, nhận bản đồ qua bộ nhớ CUDA chia sẻ (CUDA IPC); WSL không hỗ trợ, nên backend chết khi khởi động ("CUDA error: invalid resource handle") và frontend chờ mãi (lần thử 2026-11-17 treo khoảng 50 phút). Trên Kaggle (Linux) đây là cách MonoGS vẫn chạy. Từ đó adapter có luồng giám sát: in tiến độ mỗi 60 s, và dừng run ngay nếu backend chết.
+- Chưa chạy trên Kaggle.
 
 ## Đã chạy
 

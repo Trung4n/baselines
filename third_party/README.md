@@ -12,6 +12,7 @@ Chép thẳng mã nguồn vào repo, không dùng submodule, để notebook Kagg
 | `SEGS-SLAM/` | leaner-forever/SEGS-SLAM (chính chủ, ICCV 2025) | `2110994a` (2025-10-18), kèm bản ORB-SLAM3 đã sửa của nó và vocabulary | `methods/segsslam/` (OpenCV có CUDA, LibTorch và TorchScatter tải lúc setup) |
 | `LoopSplat/` | GradientSpaces/LoopSplat | `676e18f9` (2025-02-03), kèm gói `hloc` và 3 extension CUDA ở commit `requirements.txt` ghim (`_deps/`) | `methods/loopsplat/` |
 | `VarSplat/` | anhthuan1999/varsplat (chính chủ, CVPR 2026) | `4a21a0aa` (2026-06-14), kèm gói `hloc` và 3 submodule ở commit nó ghim (`simple-knn`, `gaussian_rasterizer_var`, `diff-gaussian-rasterization-w-pose-var`) trong `thirdparty/` | `methods/varsplat/` |
+| `darkgs/` | Trung4n/darkgs (bản fork của người dùng, từ tyz1030/darkgs `279bfa10`) | `32945fcd` (2026-09-21), kèm 2 extension Inria ở commit bản gốc ghim | `methods/darkgs/` (lietorch thay bằng `methods/darkgs/lietorch_shim`) |
 | `GS_ICP_SLAM/` | Lab-of-AI-and-Robotics/GS_ICP_SLAM | `5f996a87` (2026-06-20), kèm 3 submodule ở commit nó ghim (rasterizer, fast_gicp, simple-knn) | `methods/gsicp/` |
 
 Quy tắc:

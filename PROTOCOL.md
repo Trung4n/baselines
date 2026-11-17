@@ -4,7 +4,7 @@ Mọi phương pháp, kể cả MonoGS của đồ án, được chấm bằng *
 
 ## Dữ liệu vào
 
-- Chỉ dùng đầu vào của một cảm biến thật, như ràng buộc ở `CLAUDE.md` mục 3 của repo: ảnh màu `results/frame*.jpg` (ảnh `rgb_lit` hoặc `rgb_even` của biến thể) và ảnh độ sâu `results/depth*.png` của thư mục dataset MonoGS. Không dùng EXR, pass albedo, pháp tuyến, hay quỹ đạo tham chiếu. `traj.txt` chỉ dùng để chấm.
+- Chỉ dùng đầu vào của một cảm biến thật, như ràng buộc ở `CLAUDE.md` mục 3 của repo: ảnh màu `results/frame*.jpg` (ảnh `rgb_lit` hoặc `rgb_even` của biến thể) và ảnh độ sâu `results/depth*.png` của thư mục dataset MonoGS. Không dùng EXR, pass albedo, pháp tuyến, hay quỹ đạo tham chiếu. `traj.txt` chỉ dùng để chấm. Ngoại lệ duy nhất: phương pháp nhóm C, cần pose cho trước (mục "Nhóm C" bên dưới).
 - Nội tại camera và thang độ sâu lấy từ `configs/rgbd/replica/base_config.yaml`, khối `Dataset.Calibration`: kích thước 600×340, `fx`, `fy`, `cx`, `cy`, `depth_scale`. Đọc từ file đó, không chép số vào code của adapter.
 - Đủ 2000 frame, không bỏ frame, cùng thứ tự.
 
@@ -83,6 +83,17 @@ python baselines/common/score_zip.py --zip <zip> --dataset <thư mục dataset c
 ```
 
 Script giải nén vào `baselines/runs/` (git bỏ qua), rồi kiểm nội tại, cảnh, biến thể và số frame. Sau đó nó chạy `score.py` vào `baselines/results/<method>__<scene>_<variant>/<started_at>/` và chép bản ghi của run (trừ render và bản đồ) vào `run/`, kèm `source.json` (tên, cỡ, sha256 của zip). Thư mục kết quả đã có thì không bao giờ ghi đè.
+
+## Nhóm C: 3DGS ngoại tuyến, pose cho trước (quyết 2026-11-17)
+
+Áp dụng cho các phương pháp dựng bản đồ từ ảnh có pose sẵn, không phải SLAM: DarkGS, SpotlessGS, 3DGS + bilateral grid. Chúng không có ATE và không có FPS theo nghĩa của mục trên; chỉ so bản đồ.
+
+- **Pose cho trước là pose tham chiếu** (`traj.txt`), người dùng quyết 2026-11-17: tách chất lượng bản đồ khỏi lỗi tracking, đúng cách các bài 3DGS ngoại tuyến được đánh giá. Phương pháp khai báo `"reference_poses": true` trong `kaggle.json`; chỉ khi đó `kaggle_runner.run()` chép thêm `traj.txt` cạnh `results/`, và dòng đầu `run.log` ghi điều này. Bảng kết quả phải ghi "pose cho trước", vì bản đồ của đồ án và các hệ SLAM dựng từ pose **ước lượng**.
+- **Ảnh train:** các frame của lưới 0 (0, 5, 10, …, 1995: 400 ảnh), cùng thưa như keyframe của các hệ SLAM. Đám mây điểm khởi tạo dựng từ ảnh độ sâu cảm biến của các frame đó tại pose tham chiếu, thay cho SfM của COLMAP mà các phương pháp này vốn dùng (thiết lập RGB-D của đồ án). Adapter ghi cách dựng vào `method.json`.
+- **Mô hình đèn** cho phương pháp cần đèn hiệu chuẩn (DarkGS): fit từ `calib/light_calibrated.json` của dataset, tức hiệu chuẩn bằng bia của đồ án (D106), cùng nguồn với mô hình chính; **không** dùng tham số đèn của Blender (người dùng quyết 2026-11-17). Ánh sáng nền bắt đầu từ cùng giá trị đoán mà mô hình chính dùng, rồi phương pháp tự học tiếp như cách gốc của nó.
+- **Chấm ảnh trên lưới dịch** `protocol.HELDOUT_OFFSET` = 2 (frame 2, 7, 12, …; người dùng quyết 2026-11-17): không frame nào trong đó là ảnh train. Render bản đồ cuối tại **pose tham chiếu** của frame, cùng 5 frame chung (là ảnh train, chỉ dùng làm hình). `method.json` khai báo `"heldout_offset": 2` và `"given_poses": "reference"`; `score_zip.py` chuyển thành `score.py --given_poses --render_offset 2`: không tính ATE, không tính FPS (ghi `null`), chỉ PSNR, SSIM, LPIPS. `timing.json` ghi thời gian train để tham khảo.
+- **So với đồ án:** nhóm C được lợi vì pose đúng và được train ngoại tuyến nhiều vòng trên mọi ảnh train; tập frame chấm (lưới dịch) khác tập của đồ án (lưới 0 trừ keyframe). Bảng ghi rõ cả hai điểm.
+- Chưa làm: so bản đồ albedo với pass albedo như `tools/verify/eval_map.py` (cần render riêng albedo của từng phương pháp).
 
 ## Ghi lại cho mỗi lần chạy
 

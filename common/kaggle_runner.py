@@ -225,13 +225,16 @@ def stream(cmd, log, timeout_s, stall_s, progress_s, env=None, append=False, not
 
 # ---------------------------------------------------------------- local copy
 
-def stage_dataset(dataset, root):
+def stage_dataset(dataset, root, reference_poses=False):
     """Copies <dataset>/results/ to <root>/<scene>/<variant>/results/ (same
     scene/variant names, so the run's records name the same dataset) and
     returns (that folder, seconds, "copied" | "reused"). Only results/ is
     copied: the frames a sensor gives; traj.txt and the other passes stay out
-    of the run's reach. A complete earlier copy (same file names and sizes)
-    is reused.
+    of the run's reach. Exception, reference_poses=True (a group C method,
+    kaggle.json "reference_poses", PROTOCOL.md): traj.txt is copied too, next
+    to results/. A complete earlier copy (same file names and sizes, same
+    reference_poses) is reused; any other is replaced, so a SLAM method never
+    finds the traj.txt of an earlier group C staging.
 
     Why (PROTOCOL.md, FPS): reading frames from /kaggle/input costs 0.1 to
     0.2 s each and varies between sessions; GS-ICP and ORB-SLAM3 read them in
@@ -243,10 +246,16 @@ def stage_dataset(dataset, root):
     dst = os.path.join(dst_dir, "results")
     files = sorted(os.listdir(src))
     sizes = {f: os.path.getsize(os.path.join(src, f)) for f in files}
+    extra = ["traj.txt"] if reference_poses else []
+    for f in extra:
+        if not os.path.isfile(os.path.join(dataset, f)):
+            raise FileNotFoundError(f"{dataset}: no {f} (reference_poses)")
+    signature = {"source": os.path.abspath(dataset), "sizes": sizes,
+                 "extra": {f: os.path.getsize(os.path.join(dataset, f)) for f in extra}}
     done = dst_dir + ".staged.json"  # next to the copy: the adapter's folder holds results/ only
     if os.path.isfile(done):
         with open(done, encoding="utf-8") as f:
-            if json.load(f) == {"source": os.path.abspath(dataset), "sizes": sizes}:
+            if json.load(f) == signature:
                 return dst_dir, 0.0, "reused"
     need = sum(sizes.values())
     os.makedirs(root, exist_ok=True)
@@ -264,8 +273,10 @@ def stage_dataset(dataset, root):
         shutil.copyfile(os.path.join(src, f), os.path.join(dst, f))
         if (j + 1) % 1000 == 0:
             print(f"  staged {j + 1}/{len(files)}", flush=True)
+    for f in extra:
+        shutil.copyfile(os.path.join(dataset, f), os.path.join(dst_dir, f))
     with open(done, "w", encoding="utf-8") as f:
-        json.dump({"source": os.path.abspath(dataset), "sizes": sizes}, f)
+        json.dump(signature, f)
     return dst_dir, time.time() - t0, "copied"
 
 
@@ -315,12 +326,16 @@ def run(method, dataset, out, checkpoint_every, timeout_h, stall_min, progress_s
         raise FileNotFoundError(f"{dataset}: no results/ (a MonoGS dataset folder?)")
     source = dataset
     note = f"dataset read in place: {source}"
-    if stage_root:
-        dataset, secs, how = stage_dataset(source, stage_root)
-        note = (f"dataset {how} to local disk before the run (not timed, {secs:.0f} s): {source} -> {dataset} "
-                "(results/ only)")
-        print(note, flush=True)
     info = method_info(method)
+    reference_poses = info.get("reference_poses", False)
+    if not isinstance(reference_poses, bool):
+        raise ValueError(f"methods/{method}/kaggle.json: reference_poses must be true or false")
+    if stage_root:
+        dataset, secs, how = stage_dataset(source, stage_root, reference_poses)
+        note = (f"dataset {how} to local disk before the run (not timed, {secs:.0f} s): {source} -> {dataset} "
+                + ("(results/ and traj.txt: reference poses for a group C method, PROTOCOL.md)" if reference_poses
+                   else "(results/ only)"))
+        print(note, flush=True)
     if not info["checkpoints"]:
         if resume:
             raise ValueError(f"{method} has no checkpoints, nothing to resume ({info.get('why', '')}): run it again")

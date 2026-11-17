@@ -1,0 +1,27 @@
+{
+ "mlp_max_err_over_K": 0.022015704646645536,
+ "mlp_rms_err_over_K": 0.002115597034771841,
+ "mlp_at_axis": 30.410404205322266,
+ "K": 30.415605545043945,
+ "darkgs_max_err_over_K": 0.022016919047959008,
+ "darkgs_p99_err_over_K": 0.018865746840111632,
+ "darkgs_points": 50000,
+ "source": "/mnt/d/CodeForYou/Replica/04_datasets/monogs/office0/lit/calib/light_calibrated.json",
+ "ambient_start": 0.05,
+ "ambient_config": "configs/light/rgbd_lambert_calib_ambgrid.yaml",
+ "t_l2c": [
+  1.7554575606482103e-06,
+  -0.05000929906964302,
+  0.0001143901827163063
+ ],
+ "so3": [
+  -7.4326971572263e-06,
+  -1.972786479237344e-05,
+  0.0
+ ],
+ "tau_m2": 0.0001,
+ "gamma": 1.0,
+ "scaling_factor": 1.0,
+ "fit_steps": 12000,
+ "fit_seed": 0
+}

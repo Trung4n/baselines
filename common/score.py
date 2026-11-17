@@ -66,7 +66,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--method", required=True)
     ap.add_argument("--dataset", required=True, help="MonoGS dataset folder, e.g. .../office0/lit")
-    ap.add_argument("--traj", required=True)
+    ap.add_argument("--traj", default=None, help="required unless --given_poses")
+    ap.add_argument("--given_poses", action="store_true",
+                    help="group C (PROTOCOL.md): the map was built at the reference poses; no ATE, no FPS, "
+                         "renders at the reference poses on the held-out grid")
     ap.add_argument("--keyframes", default=None)
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--renders", default=None)
@@ -83,6 +86,11 @@ def main(argv=None):
     w.add_argument("--wandb", action="store_true")
     w.add_argument("--no_wandb", action="store_true")
     args = ap.parse_args(argv)
+    if args.given_poses == (args.traj is not None):
+        raise SystemExit("give exactly one of --traj (a SLAM method) and --given_poses (group C, PROTOCOL.md)")
+    if args.given_poses and (args.no_render or args.render_offset != protocol.HELDOUT_OFFSET):
+        raise SystemExit(f"--given_poses is scored on its renders at --render_offset {protocol.HELDOUT_OFFSET} "
+                         "(PROTOCOL.md, Nhóm C)")
 
     # Every check before the first write, so a refused run leaves no --out.
     colors, _ = protocol.dataset_frames(args.dataset)
@@ -91,7 +99,7 @@ def main(argv=None):
     if len(gt_list) != n:
         raise ValueError(f"{len(gt_list)} reference poses for {n} frames")
     gt = {i: gt_list[i] for i in range(n)}
-    est = protocol.read_tum(args.traj)
+    est = protocol.read_tum(args.traj) if args.traj else {}
     keyframes = [int(x) for x in open(args.keyframes).read().split()] if args.keyframes else []
     timing = json.load(open(args.timing))
     for key in ("frames", "seconds", "gpu", "what"):
@@ -103,15 +111,19 @@ def main(argv=None):
                          "(PROTOCOL.md: use --render_offset protocol.HELDOUT_OFFSET)")
 
     os.makedirs(args.out, exist_ok=True)
-    shutil.copy(args.traj, os.path.join(args.out, "traj_est.tum"))
+    if args.traj:
+        shutil.copy(args.traj, os.path.join(args.out, "traj_est.tum"))
     if args.keyframes:
         shutil.copy(args.keyframes, os.path.join(args.out, "keyframes.txt"))
 
     plot_dir = os.path.join(args.out, "plot")
-    missing = [i for i in range(n) if i not in est]
-    ate_all, n_all = protocol.ate(est, gt, list(range(n)), plot_dir, "final_all", args.monocular)
-    ate_kf, n_kf = (protocol.ate(est, gt, keyframes, plot_dir, "final", args.monocular)
-                    if keyframes else (float("nan"), 0))
+    if args.given_poses:  # nothing estimated: no ATE
+        missing, ate_all, n_all, ate_kf, n_kf = [], None, 0, None, 0
+    else:
+        missing = [i for i in range(n) if i not in est]
+        ate_all, n_all = protocol.ate(est, gt, list(range(n)), plot_dir, "final_all", args.monocular)
+        ate_kf, n_kf = (protocol.ate(est, gt, keyframes, plot_dir, "final", args.monocular)
+                        if keyframes else (float("nan"), 0))
 
     render = None
     if not args.no_render:
@@ -135,7 +147,7 @@ def main(argv=None):
         render = {**mean, "frames": len(rows), "quantized_8bit": quantized, "grid_offset": args.render_offset}
         write_figures(args.renders, colors, os.path.join(args.out, "figures"))
 
-    fps = timing["frames"] / timing["seconds"]
+    fps = None if args.given_poses else timing["frames"] / timing["seconds"]
     scene = os.path.basename(os.path.dirname(os.path.normpath(args.dataset)))
     variant = os.path.basename(os.path.normpath(args.dataset))
     metrics = {
@@ -143,7 +155,8 @@ def main(argv=None):
         "frames_dataset": n, "frames_estimated": len(est), "frames_missing": len(missing),
         "ate_all_m": ate_all, "ate_all_frames": n_all,
         "ate_kf_m": ate_kf, "ate_kf_frames": n_kf,
-        "alignment": "Sim3" if args.monocular else "SE3",
+        "alignment": None if args.given_poses else ("Sim3" if args.monocular else "SE3"),
+        "poses": "given (reference, PROTOCOL.md Nhóm C)" if args.given_poses else "estimated",
         "render": render, "fps": fps, "timing": timing,
         "method_commit": args.method_commit, "notes": args.notes,
         "scored_at": datetime.datetime.now().isoformat(timespec="seconds"),
