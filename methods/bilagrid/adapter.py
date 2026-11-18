@@ -196,6 +196,14 @@ def cmd_run(args):
         raise SystemExit("bilagrid is run in one go here: use --checkpoint_every 0 and no --resume")
     if os.path.exists(os.path.join(work, "export")) or os.path.exists(os.path.join(work, "data")):
         raise SystemExit(f"{work} already holds a run: use a new --work")
+    # One GPU: gsplat's cli() spawns one process per visible GPU (Kaggle T4 x2), which is a
+    # different run (twice the batch, its docs scale the steps) and fails here (the spawned
+    # processes do not run simple_trainer's __main__ block, which defines BilateralGrid).
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if visible is None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = visible = "0"
+    elif len([d for d in visible.split(",") if d.strip()]) != 1:
+        raise SystemExit(f"CUDA_VISIBLE_DEVICES={visible!r}: run bilagrid on one GPU (gsplat's single-GPU default)")
     import gsplat
 
     if gsplat.__version__ != GSPLAT_VERSION:
@@ -227,6 +235,7 @@ def cmd_run(args):
         "point_cloud": f"sensor depth of the training frames at the reference poses, voxel {points['voxel_m']} m "
                        "(methods/darkgs/colmap_pkg.py; gsplat initialises from COLMAP SfM points)",
         "simple_trainer.py": "default " + " ".join(trainer_args("<package>", "<dir>", args.iterations)[1:]),
+        "gpus": f"CUDA_VISIBLE_DEVICES={visible}: one GPU (gsplat's cli() would spawn one process per GPU)",
         "datasets/colmap.py": "train on every image (upstream: every 8th held out, always image 0), on a copy",
         "datasets/__init__.py": "added (empty) on the copy: the Hugging Face 'datasets' package would shadow it",
         "simple_trainer.py checkpoint": "also saves the bilateral grids (bil_grids; upstream saves the splats only), on a copy",
